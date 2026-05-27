@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>data.js · Sanity-Check</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap');
+  *{box-sizing:border-box}
+  body{
+    font-family:'Inter',sans-serif; margin:0; background:#fafafa; color:#1a1a1a;
+    -webkit-font-smoothing:antialiased; padding:32px 22px 60px;
+  }
+  .wrap{max-width:920px; margin:0 auto}
+  h1{
+    font-family:'Inter',sans-serif; font-weight:800; font-size:28px; letter-spacing:-.025em;
+    margin:0 0 4px;
+  }
+  .sub{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:#5a5a64; margin-bottom:24px;
+  }
+  .stats{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+    gap:10px; margin-bottom:24px;
+  }
+  .stat{
+    background:#fff; border:1px solid #e4e4e7; border-radius:10px; padding:14px 16px;
+  }
+  .stat-num{ font-family:'Inter',sans-serif; font-weight:800; font-size:24px; letter-spacing:-.02em; }
+  .stat-lbl{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; color:#5a5a64; margin-top:4px;
+  }
+  .verdict{
+    padding:18px 22px; border-radius:12px; margin-bottom:24px;
+    font-weight:600; display:flex; align-items:center; gap:12px;
+  }
+  .verdict.ok{ background:#e9f5ee; color:#15803d; border:1px solid #86efac; }
+  .verdict.warn{ background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+  .verdict.error{ background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+  .verdict-icon{ font-size:24px; }
+  .issues h2{
+    font-family:'Inter',sans-serif; font-weight:700; font-size:16px;
+    margin:24px 0 10px; padding-bottom:8px;
+    border-bottom:1px solid #e4e4e7; display:flex; align-items:center; gap:8px;
+  }
+  .issues h2 .count{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:#5a5a64; margin-left:auto; font-weight:500;
+  }
+  .issue{
+    background:#fff; border:1px solid #e4e4e7; border-radius:8px;
+    padding:11px 14px; margin-bottom:6px; display:flex; gap:10px;
+    border-left:4px solid #e4e4e7;
+  }
+  .issue.error{ border-left-color:#dc2626; }
+  .issue.warn{ border-left-color:#d97706; }
+  .issue-type{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.08em;
+    text-transform:uppercase; font-weight:700; flex-shrink:0;
+    padding:2px 7px; border-radius:4px;
+  }
+  .issue-type.error{ background:#fee2e2; color:#991b1b; }
+  .issue-type.warn{ background:#fef3c7; color:#92400e; }
+  .issue-msg{ font-size:13.5px; line-height:1.5; }
+  .issue-msg code{
+    font-family:'IBM Plex Mono',monospace; font-size:12px;
+    background:#f4f4f5; padding:1px 5px; border-radius:3px;
+  }
+  .none{
+    background:#fff; border:1px dashed #e4e4e7; border-radius:8px;
+    padding:14px; text-align:center; color:#5a5a64; font-size:13px;
+  }
+  .hdr-back{
+    display:inline-block; margin-top:30px; font-size:12.5px; color:#5a5a64;
+    text-decoration:none; padding:8px 14px; border:1px solid #e4e4e7; border-radius:8px;
+  }
+  .hdr-back:hover{ border-color:#1a1a1a; color:#1a1a1a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>data.js · Sanity-Check</h1>
+  <div class="sub">Validiert Plan-Keys, Pflichtfelder, Selbstreferenzen, for-Listen</div>
+
+  <div id="stats" class="stats"></div>
+  <div id="verdict"></div>
+  <div id="issues" class="issues"></div>
+
+  <a href="index.html" class="hdr-back">← Zurück zum Lizenz-Explorer</a>
+</div>
+
+<script src="data.js"></script>
+<script>
+const PLANS  = window.M365.plans;
+const ADDONS = window.M365.addons;
+const CATS   = window.M365.categories;
+
+const errors = [];
+const warnings = [];
+
+function err(msg){ errors.push(msg); }
+function warn(msg){ warnings.push(msg); }
+
+const planKeys = new Set();
+const addonKeys = new Set();
+const allKeys = new Set();
+
+// ---- Plans validieren ----
+PLANS.forEach((p, i) => {
+  ['key','fam','name','short','color'].forEach(f => {
+    if(!p[f]) err(`Plan #${i} fehlt Feld <code>${f}</code> (key: <code>${p.key || '?'}</code>)`);
+  });
+  if(p.key){
+    if(planKeys.has(p.key)) err(`Doppelter Plan-Key: <code>${p.key}</code>`);
+    if(allKeys.has(p.key)) err(`Plan-Key <code>${p.key}</code> kollidiert mit einem Add-on-Key`);
+    planKeys.add(p.key);
+    allKeys.add(p.key);
+  }
+});
+
+// ---- Add-ons validieren ----
+ADDONS.forEach((a, i) => {
+  ['key','name','color'].forEach(f => {
+    if(!a[f]) err(`Add-on #${i} fehlt Feld <code>${f}</code> (key: <code>${a.key || '?'}</code>)`);
+  });
+  if(a.key){
+    if(addonKeys.has(a.key)) err(`Doppelter Add-on-Key: <code>${a.key}</code>`);
+    if(allKeys.has(a.key)) err(`Add-on-Key <code>${a.key}</code> kollidiert mit einem Plan-Key`);
+    addonKeys.add(a.key);
+    allKeys.add(a.key);
+  }
+});
+
+// ---- Komponenten validieren ----
+let componentCount = 0;
+let addonComponentCount = 0;
+const addonSelfRefs = new Set(); // welche addon-keys haben einen passenden Komponenten-Eintrag
+
+CATS.forEach((cat, ci) => {
+  if(!cat.cat) err(`Kategorie #${ci} hat kein <code>cat</code>-Feld`);
+  if(!Array.isArray(cat.items)) {
+    err(`Kategorie "${cat.cat}" hat kein <code>items</code>-Array`);
+    return;
+  }
+  cat.items.forEach((it, ii) => {
+    componentCount++;
+    const where = `Komponente "${it.n || '?'}" in Kategorie "${cat.cat}"`;
+
+    if(!it.n) err(`${where}: fehlt <code>n</code> (Name)`);
+    if(!it.desc) err(`${where}: fehlt <code>desc</code> (Beschreibung)`);
+    if(!it.learn) warn(`${where}: fehlt <code>learn</code> (Doku-Link)`);
+    if(!it.in || typeof it.in !== 'object') {
+      err(`${where}: fehlt <code>in</code> (Plan-Zuordnung)`);
+      return;
+    }
+
+    // in:{}-Keys pruefen
+    const inKeys = Object.keys(it.in);
+    if(inKeys.length === 0 && !it.addon) {
+      // bewusst leer, z.B. Sentinel-Anbindung -- ok, aber Warning
+      warn(`${where}: <code>in:{}</code> ist leer (Komponente erscheint nirgends als enthalten)`);
+    }
+    inKeys.forEach(k => {
+      if(!allKeys.has(k)) {
+        err(`${where}: <code>in.${k}</code> verweist auf nicht existierenden Plan/Add-on-Key`);
+      }
+    });
+
+    // Add-on-Komponente: muss Selbstreferenz auf einen addon-key haben
+    if(it.addon === true) {
+      addonComponentCount++;
+      const selfRef = inKeys.find(k => addonKeys.has(k));
+      if(!selfRef) {
+        err(`${where}: ist als <code>addon:true</code> markiert, hat aber keine Selbstreferenz auf einen Add-on-Key in <code>in:{}</code>`);
+      } else {
+        addonSelfRefs.add(selfRef);
+      }
+    }
+
+    // for:[]-Liste pruefen
+    if(it.for) {
+      if(!Array.isArray(it.for)) {
+        err(`${where}: <code>for</code> ist gesetzt, aber kein Array`);
+      } else {
+        it.for.forEach(k => {
+          if(!planKeys.has(k)) {
+            err(`${where}: <code>for</code> enthaelt nicht existierenden Plan-Key <code>${k}</code>`);
+          }
+        });
+      }
+    }
+  });
+});
+
+// Add-ons ohne korrespondierende Komponente
+addonKeys.forEach(k => {
+  if(!addonSelfRefs.has(k)) {
+    warn(`Add-on-Spalte <code>${k}</code> in <code>addons[]</code> hat keine korrespondierende Komponente in den Kategorien (keine Selbstreferenz)`);
+  }
+});
+
+// ---- Statistik rendern ----
+document.getElementById('stats').innerHTML = `
+  <div class="stat"><div class="stat-num">${PLANS.length}</div><div class="stat-lbl">Plaene</div></div>
+  <div class="stat"><div class="stat-num">${ADDONS.length}</div><div class="stat-lbl">Add-on-Spalten</div></div>
+  <div class="stat"><div class="stat-num">${CATS.length}</div><div class="stat-lbl">Kategorien</div></div>
+  <div class="stat"><div class="stat-num">${componentCount}</div><div class="stat-lbl">Komponenten</div></div>
+  <div class="stat"><div class="stat-num">${addonComponentCount}</div><div class="stat-lbl">Add-on-Komponenten</div></div>
+`;
+
+// ---- Verdict rendern ----
+let verdictHtml;
+if(errors.length === 0 && warnings.length === 0) {
+  verdictHtml = `<div class="verdict ok"><span class="verdict-icon">✓</span><span>Alles sauber. Keine Fehler, keine Warnungen.</span></div>`;
+} else if(errors.length === 0) {
+  verdictHtml = `<div class="verdict warn"><span class="verdict-icon">⚠</span><span>${warnings.length} ${warnings.length===1?'Warnung':'Warnungen'}, keine Fehler. Tool ist nutzbar.</span></div>`;
+} else {
+  verdictHtml = `<div class="verdict error"><span class="verdict-icon">✗</span><span>${errors.length} ${errors.length===1?'Fehler':'Fehler'} und ${warnings.length} ${warnings.length===1?'Warnung':'Warnungen'}. Bitte vor dem Test fixen.</span></div>`;
+}
+document.getElementById('verdict').innerHTML = verdictHtml;
+
+// ---- Issues rendern ----
+const issuesEl = document.getElementById('issues');
+let issuesHtml = '';
+
+issuesHtml += `<h2>Fehler <span class="count">${errors.length}</span></h2>`;
+if(errors.length === 0) {
+  issuesHtml += '<div class="none">Keine Fehler gefunden.</div>';
+} else {
+  errors.forEach(e => {
+    issuesHtml += `<div class="issue error"><span class="issue-type error">Fehler</span><span class="issue-msg">${e}</span></div>`;
+  });
+}
+
+issuesHtml += `<h2>Warnungen <span class="count">${warnings.length}</span></h2>`;
+if(warnings.length === 0) {
+  issuesHtml += '<div class="none">Keine Warnungen.</div>';
+} else {
+  warnings.forEach(w => {
+    issuesHtml += `<div class="issue warn"><span class="issue-type warn">Warnung</span><span class="issue-msg">${w}</span></div>`;
+  });
+}
+
+issuesEl.innerHTML = issuesHtml;
+</script>
+</body>
+</html>
