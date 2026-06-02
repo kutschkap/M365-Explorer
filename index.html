@@ -1,0 +1,3988 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M365 Explorer</title>
+<meta name="description" content="M365 Explorer — Sales Supporter und Lizenz-Explorer für Microsoft 365 in einer Oberfläche.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- PDF-Export (lokal eingebunden, funktioniert auch offline) -->
+<script defer src="vendor/jspdf.umd.min.js"></script>
+<script defer src="vendor/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+/* =====================================================================
+   M365 EXPLORER — globale Hülle, Landing-Page, Swoosh-Übergang, Druck
+   Die beiden Tool-Stylesheets stehen weiter unten, jeweils unter
+   #view-explorer { … } bzw. #view-sales { … } gekapselt (CSS-Nesting),
+   damit sich ihre Regeln nicht gegenseitig überschreiben.
+   ===================================================================== */
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:#fafafb;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+}
+body.lp-lock{ overflow:hidden; }
+
+/* ---- Tool-Ansichten + Swoosh ---- */
+.tool-view{ display:none; }
+.tool-view.active{ display:block; animation:viewRise .72s cubic-bezier(.16,.84,.3,1) both; }
+@keyframes viewRise{
+  from{ opacity:0; transform:translateY(46px) scale(.985); }
+  to{ opacity:1; transform:none; }
+}
+
+/* ============ LANDING (hell, passend zu beiden Tools) ============ */
+#landing{
+  position:fixed; inset:0; z-index:200; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(1100px 660px at 80% -10%, rgba(226,0,116,.13) 0%, transparent 55%),
+    radial-gradient(820px 560px at 4% 110%, rgba(124,47,214,.10) 0%, transparent 55%),
+    #fafafb;
+  color:#0f0f14;
+  transition:transform .9s cubic-bezier(.76,0,.24,1), opacity .55s ease .12s;
+}
+#landing.lp-dismiss{ transform:translateY(-104%); opacity:0; pointer-events:none; }
+
+.lp-bg{ position:absolute; inset:0; pointer-events:none; z-index:0; }
+.lp-blob{ position:absolute; border-radius:50%; filter:blur(90px); mix-blend-mode:multiply; }
+.lp-blob-1{ width:520px; height:520px; top:-130px; right:-80px; background:radial-gradient(circle,rgba(226,0,116,.30),transparent 70%); animation:blobFloat 18s ease-in-out infinite; }
+.lp-blob-2{ width:460px; height:460px; bottom:-150px; left:-70px; background:radial-gradient(circle,rgba(124,47,214,.24),transparent 70%); animation:blobFloat 22s ease-in-out infinite reverse; }
+.lp-blob-3{ width:380px; height:380px; top:40%; left:46%; background:radial-gradient(circle,rgba(255,61,154,.18),transparent 70%); animation:blobFloat 26s ease-in-out infinite; }
+@keyframes blobFloat{
+  0%,100%{ transform:translate(0,0) scale(1); }
+  33%{ transform:translate(-40px,30px) scale(1.08); }
+  66%{ transform:translate(30px,-24px) scale(.94); }
+}
+.lp-grid{
+  position:absolute; inset:0;
+  background-image:radial-gradient(circle at 1px 1px, rgba(15,15,20,.06) 1px, transparent 0);
+  background-size:24px 24px;
+  mask-image:radial-gradient(ellipse 78% 70% at 50% 42%,#000 25%,transparent 80%);
+  -webkit-mask-image:radial-gradient(ellipse 78% 70% at 50% 42%,#000 25%,transparent 80%);
+}
+.lp-noise{ display:none; }
+
+.lp-inner{
+  position:relative; z-index:1; width:100%; max-width:1080px;
+  padding:40px 28px; display:flex; flex-direction:column; align-items:center;
+}
+.lp-head{ text-align:center; margin-bottom:46px; animation:lpUp .8s cubic-bezier(.16,.84,.3,1) both; }
+.lp-eyebrow{
+  font-family:'JetBrains Mono','IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:#b3005c; font-weight:600;
+  display:inline-flex; align-items:center; gap:9px; margin-bottom:22px;
+  padding:7px 15px 7px 13px; border-radius:999px;
+  background:rgba(226,0,116,.07); border:1px solid rgba(226,0,116,.22);
+}
+.lp-eyebrow-dot{
+  width:6px; height:6px; border-radius:50%; background:#e20074;
+  box-shadow:0 0 0 4px rgba(226,0,116,.14);
+}
+.lp-title{
+  font-family:'Inter Tight','Inter',sans-serif; font-weight:800;
+  font-size:clamp(46px,9vw,104px); line-height:.92; letter-spacing:-.045em;
+  margin:0; color:#0f0f14;
+}
+.lp-title-accent{
+  background:linear-gradient(120deg,#e20074 0%,#ff2d97 60%,#ff6fb3 100%);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+}
+.lp-sub{
+  margin:22px auto 0; max-width:560px; font-size:clamp(15px,2vw,18px);
+  line-height:1.55; color:#5a5a64; font-weight:400; letter-spacing:-.01em;
+}
+
+.lp-cards{
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px;
+  width:100%; max-width:860px;
+}
+.lp-card{
+  position:relative; overflow:hidden; text-align:left; cursor:pointer;
+  background:#ffffff;
+  border:1px solid #e6e6ea; border-radius:22px;
+  padding:28px 28px 24px; color:#0f0f14;
+  display:flex; flex-direction:column; gap:14px; min-height:268px;
+  box-shadow:0 1px 2px rgba(15,15,20,.04), 0 18px 44px -28px rgba(226,0,116,.35);
+  transition:transform .35s cubic-bezier(.16,.84,.3,1), border-color .3s, background .3s, box-shadow .3s;
+  animation:lpUp .8s cubic-bezier(.16,.84,.3,1) both;
+}
+.lp-card:nth-child(1){ animation-delay:.08s; }
+.lp-card:nth-child(2){ animation-delay:.16s; }
+.lp-card:hover{
+  transform:translateY(-6px);
+  border-color:rgba(226,0,116,.55);
+  background:linear-gradient(180deg,#fff 0%,#fff6fb 100%);
+  box-shadow:0 1px 2px rgba(15,15,20,.04), 0 34px 70px -34px rgba(226,0,116,.55);
+}
+.lp-card:focus-visible{ outline:2px solid #e20074; outline-offset:3px; }
+.lp-card:active{ transform:translateY(-2px) scale(.99); }
+.lp-card-glow{
+  position:absolute; top:-40%; right:-30%; width:320px; height:320px; pointer-events:none;
+  background:radial-gradient(circle,rgba(226,0,116,.22),transparent 65%);
+  opacity:0; transition:opacity .35s; filter:blur(18px);
+}
+.lp-card:hover .lp-card-glow{ opacity:1; }
+.lp-card-top{ display:flex; align-items:center; justify-content:space-between; }
+.lp-card-icon{
+  width:50px; height:50px; border-radius:14px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg,#e20074,#ff52a8);
+  box-shadow:0 10px 24px -8px rgba(226,0,116,.55);
+}
+.lp-card-icon svg{ width:25px; height:25px; color:#fff; }
+.lp-card-tag{
+  font-family:'JetBrains Mono','IBM Plex Mono',monospace; font-size:10px; letter-spacing:.16em;
+  text-transform:uppercase; color:#71717a; font-weight:600;
+  border:1px solid #e6e6ea; padding:5px 10px; border-radius:999px;
+}
+.lp-card-name{
+  font-family:'Inter Tight','Inter',sans-serif; font-weight:700; font-size:26px;
+  letter-spacing:-.025em; margin:6px 0 0; line-height:1.05; color:#0f0f14;
+}
+.lp-card-desc{
+  font-size:14px; line-height:1.6; color:#5a5a64; font-weight:400;
+  flex:1; margin:0;
+}
+.lp-card-go{
+  display:inline-flex; align-items:center; gap:8px; margin-top:6px;
+  font-family:'Inter Tight','Inter',sans-serif; font-weight:600; font-size:14.5px; color:#e20074;
+}
+.lp-card-go svg{ width:17px; height:17px; transition:transform .3s cubic-bezier(.16,.84,.3,1); }
+.lp-card:hover .lp-card-go svg{ transform:translateX(6px); }
+
+.lp-foot{
+  margin-top:42px; display:flex; align-items:center; gap:13px; max-width:680px;
+  text-align:left; animation:lpUp .8s cubic-bezier(.16,.84,.3,1) .24s both;
+}
+.lp-beta{
+  flex-shrink:0; font-family:'JetBrains Mono','IBM Plex Mono',monospace; font-size:10px;
+  letter-spacing:.18em; font-weight:700; background:#e20074; color:#fff;
+  padding:4px 9px; border-radius:5px;
+}
+.lp-foot-text{ font-size:11.5px; line-height:1.5; color:#9ca3af; }
+
+@keyframes lpUp{ from{ opacity:0; transform:translateY(22px); } to{ opacity:1; transform:none; } }
+
+@media (max-width:720px){
+  .lp-cards{ grid-template-columns:1fr; }
+  .lp-card{ min-height:0; }
+  .lp-head{ margin-bottom:34px; }
+}
+@media (prefers-reduced-motion:reduce){
+  #landing{ transition:opacity .3s ease; }
+  .lp-blob,.tool-view.active{ animation:none; }
+  #landing.lp-dismiss{ transform:none; }
+}
+
+/* ---- „Startseite"-Zurück-Button (in beide Tools per JS eingehängt) ---- */
+.x-home svg{ width:14px; height:14px; }
+
+/* ============ DRUCK / PDF (Lizenz-Explorer-Vergleich) ============ */
+#printHeader{ display:none; }
+@media print{
+  @page{ margin:14mm; size:landscape; }
+  body{ background:#fff !important; }
+  #landing{ display:none !important; }
+  #view-sales{ display:none !important; }
+  #view-explorer{ display:block !important; background:#fff !important; }
+  #view-explorer .wrap{ max-width:none !important; padding:0 !important; }
+  #view-explorer .masthead,
+  #view-explorer .presets,
+  #view-explorer .picker,
+  #view-explorer .controls,
+  #view-explorer .legend,
+  #view-explorer .foot,
+  #view-explorer .learn-link,
+  .x-home,
+  #explorerPrint{ display:none !important; }
+  #view-explorer .table-scroll{ overflow:visible !important; box-shadow:none !important; border-radius:0 !important; }
+  #view-explorer thead th{ position:static !important; }
+  #view-explorer td.feat-cell{ position:static !important; }
+  #view-explorer tr.feat-row,
+  #view-explorer .tile,
+  #view-explorer .search-card{ break-inside:avoid; }
+  #view-explorer .detail-hero,
+  #view-explorer .search-hero{ position:static !important; }
+  #view-explorer, #view-explorer *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  #printHeader{
+    display:block !important; margin:0 0 14px; padding:0 0 12px;
+    border-bottom:2px solid #e20074;
+  }
+  #printHeader .ph-title{ font-family:'Inter Tight','Inter',sans-serif; font-size:20px; font-weight:800; color:#1a1a1a; margin:0; }
+  #printHeader .ph-meta{ font-size:11px; color:#5a5a64; margin-top:5px; }
+  #printHeader .ph-plans{ font-size:12px; color:#1a1a1a; margin-top:7px; font-weight:600; }
+}
+
+
+/* ============ LIZENZ-EXPLORER (gekapselt) ============ */
+#view-explorer {
+
+  
+
+  & {
+    --ink:#1a1a1a; --ink-soft:#5a5a64; --paper:#fafafa; --card:#ffffff;
+    --line:#e4e4e7; --line-strong:#1a1a1a;
+    --accent:#e20074; --accent-soft:#fce4f1; --accent-dark:#a8005a;
+    --in:#1f9d55; --in-bg:#e9f5ee; --out:#c7c2b6;
+    --shadow:0 1px 0 rgba(0,0,0,.03), 0 12px 32px -16px rgba(226,0,116,.18);
+  }
+  & * { box-sizing:border-box; }
+  & {
+    margin:0; color:var(--ink); line-height:1.55;
+    font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    background:radial-gradient(900px 500px at 92% -10%,rgba(226,0,116,.06) 0%,transparent 60%),var(--paper);
+    letter-spacing:-.005em;
+  }
+  .wrap{ max-width:1320px; margin:0 auto; padding:32px 22px 90px; }
+
+  header.masthead{
+    border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:24px;
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
+  .brand-mark{
+    width:46px; height:46px; border-radius:10px; flex-shrink:0;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Inter',sans-serif; font-weight:900; font-size:24px;
+    letter-spacing:-.05em; line-height:1;
+    box-shadow:0 2px 0 var(--accent-dark), 0 8px 24px -8px rgba(226,0,116,.4);
+  }
+  .brand-text{ min-width:0; }
+  .brand-title{
+    font-family:'Inter',sans-serif; font-weight:800;
+    font-size:clamp(20px,2.6vw,26px); letter-spacing:-.025em;
+    margin:0; line-height:1.05; color:var(--ink);
+  }
+  .beta-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.15em;
+    font-weight:700; background:var(--accent); color:#fff;
+    padding:3px 8px; border-radius:4px; margin-left:8px;
+    vertical-align:middle; text-transform:uppercase;
+    box-shadow:0 1px 0 var(--accent-dark);
+  }
+  .brand-sub{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-soft); margin-top:4px;
+  }
+  .header-actions{ display:flex; gap:8px; align-items:center; }
+  .hdr-btn{
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+    padding:9px 16px; border-radius:10px; cursor:pointer;
+    transition:.15s; border:1.5px solid var(--line); white-space:nowrap;
+    display:inline-flex; align-items:center;
+  }
+  .hdr-btn.ghost{ background:var(--card); color:var(--ink); }
+  .hdr-btn.ghost:hover{ border-color:var(--ink); background:#fafafa; }
+  .hdr-btn.primary{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .hdr-btn.primary:hover{ background:#000; }
+
+  /* ---- Schnellauswahl-Presets ---- */
+  .presets{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; }
+  .presets-label{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-soft); margin-right:4px;
+  }
+  .preset-btn{
+    font-family:inherit; font-size:12.5px; font-weight:500; cursor:pointer;
+    border:1px dashed var(--line); background:transparent; color:var(--ink-soft);
+    padding:6px 11px; border-radius:999px; transition:.15s;
+  }
+  .preset-btn:hover{ border-color:var(--ink); color:var(--ink); background:var(--card); }
+  .preset-btn.reset{ border-style:solid; color:var(--accent); border-color:var(--accent-soft); }
+  .preset-btn.reset:hover{ background:var(--accent-soft); }
+
+  /* ---- Plan-Auswahl als Familien-Kacheln ---- */
+  .picker{ margin-bottom:18px; transition:opacity .2s; }
+  .picker.search-active, .presets.search-active{ opacity:.4; }
+  .picker.search-active:hover, .presets.search-active:hover{ opacity:1; }
+  .presets{ transition:opacity .2s; }
+  .picker-label{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-soft); margin-bottom:9px;
+  }
+  .chips{ display:grid; grid-template-columns:repeat(auto-fit, minmax(195px, 1fr)); gap:10px; }
+
+  .fam-tile{
+    background:var(--card); border:1.5px solid var(--line); border-radius:12px;
+    overflow:hidden; transition:.18s; display:flex; flex-direction:column;
+    border-left:4px solid var(--line);
+  }
+  .fam-tile.open{
+    border-left-color:var(--accent);
+    box-shadow:0 1px 0 rgba(0,0,0,.02), 0 14px 32px -16px rgba(226,0,116,.28);
+  }
+  .fam-tile.has-selected{
+    border-color:var(--ink); border-left:4px solid var(--accent);
+    box-shadow:0 1px 0 rgba(0,0,0,.02), 0 8px 24px -16px rgba(226,0,116,.35);
+  }
+  .fam-tile.open.has-selected{
+    box-shadow:0 1px 0 rgba(0,0,0,.02), 0 16px 38px -16px rgba(226,0,116,.4);
+  }
+  .fam-tile-head{
+    padding:12px 13px; cursor:pointer; user-select:none; display:flex;
+    align-items:center; gap:11px; transition:.15s;
+    min-height:78px;  /* hoch genug fuer 2-zeilige Familien-Namen + Counter, damit alle Trennlinien auf gleicher Y-Position liegen */
+  }
+  .fam-tile-head:hover{ background:rgba(0,0,0,.025); }
+  .fam-tile-swatch{
+    width:10px; height:10px; border-radius:3px; flex-shrink:0;
+    background:var(--fam-c, var(--ink-soft));
+    align-self:flex-start; margin-top:3px;  /* mit erster Textzeile oben buendig */
+  }
+  .fam-tile-meta{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+  .fam-tile-name{
+    font-family:'Inter',sans-serif; font-weight:700; font-size:14px;
+    color:var(--ink); letter-spacing:-.01em; line-height:1.2;
+  }
+  .fam-tile-count{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em;
+    color:var(--ink-soft); text-transform:uppercase;
+  }
+  .fam-tile.has-selected .fam-tile-count{ color:var(--accent); font-weight:600; }
+  .fam-tile-chev{
+    flex-shrink:0; font-size:11px; color:var(--ink-soft); opacity:.6;
+    transition:transform .2s; align-self:flex-start; margin-top:3px;
+  }
+  .fam-tile.open .fam-tile-chev{ transform:rotate(180deg); opacity:.9; color:var(--accent); }
+  .fam-tile-body{
+    display:none; padding:10px 13px 12px; flex-wrap:wrap; gap:5px;
+    border-top:2px solid var(--accent);
+    background:linear-gradient(180deg, var(--accent-soft) 0%, rgba(252,228,241,0) 75%);
+  }
+  .fam-tile.open .fam-tile-body{ display:flex; }
+
+  .chip{
+    font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+    border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft);
+    padding:6px 12px; border-radius:8px; transition:.15s;
+    display:inline-flex; align-items:center;
+  }
+  .chip:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  .chip[aria-pressed="true"]{
+    border-color:var(--accent); color:var(--ink);
+    background:var(--accent-soft); font-weight:700;
+  }
+  .chip[aria-pressed="true"]::before{ content:'✓'; color:var(--accent); margin-right:6px; font-weight:700; }
+
+  /* ---- Controls ---- */
+  .controls{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:18px 0 18px; }
+  .seg{ display:inline-flex; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:4px; box-shadow:var(--shadow); }
+  .seg button{
+    font-family:inherit; font-size:13px; font-weight:600; border:0; background:transparent;
+    color:var(--ink-soft); padding:9px 14px; border-radius:8px; cursor:pointer; transition:.15s;
+  }
+  .seg button[aria-pressed="true"]{ background:var(--accent); color:#fff; }
+  .search{ flex:1 1 220px; min-width:200px; position:relative; }
+  .search input{
+    width:100%; font-family:inherit; font-size:14px; padding:11px 14px 11px 38px;
+    border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); box-shadow:var(--shadow);
+  }
+  .search input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .search svg{ position:absolute; left:13px; top:50%; transform:translateY(-50%); opacity:.4; }
+  .count-pill{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); margin-left:auto; align-self:center; }
+
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin-bottom:18px; }
+  .legend span{ display:inline-flex; align-items:center; gap:7px; }
+  .dot{ width:13px; height:13px; border-radius:4px; display:inline-block; }
+  .dot.in{ background:var(--in); } .dot.out{ background:var(--out); } .dot.new{ background:var(--accent); }
+
+  /* ---- Tabelle ---- */
+  .table-scroll{ overflow-x:auto; border-radius:16px; box-shadow:var(--shadow); }
+  table{
+    border-collapse:collapse; width:100%; background:var(--card);
+    border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  thead th{
+    position:sticky; top:0; z-index:4; background:var(--card);
+    border-bottom:3px solid var(--accent); padding:13px 9px; text-align:center;
+    vertical-align:top; min-width:78px;
+  }
+  thead th.feat-head{
+    text-align:left; background:var(--ink); color:#fff; min-width:240px; padding:13px 12px;
+    border-bottom:3px solid var(--accent);
+    position:sticky; left:0; z-index:6;  /* Ecke: sticky top + left, ueber allen anderen */
+  }
+  thead th.feat-head .fh-title{ font-family:'Inter',sans-serif; font-size:16px; font-weight:700; letter-spacing:-.01em; }
+  thead th.feat-head .fh-sub{ font-size:11px; opacity:.7; font-weight:400; }
+  .plan-tag{
+    font-family:'Inter',sans-serif; font-weight:700; font-size:17px; line-height:1;
+    display:block; letter-spacing:-.01em;
+  }
+  .plan-name{
+    font-family:'IBM Plex Sans',sans-serif; font-weight:500; font-size:10.5px;
+    color:var(--ink-soft); display:block; margin-top:5px; line-height:1.2;
+  }
+  th.is-addon{ min-width:118px; }
+  th.is-addon .plan-tag{ font-size:13px; color:var(--accent); }
+  th.is-addon .plan-name{ color:var(--accent); opacity:.8; }
+  th.is-addon::after{ content:'ADD-ON'; display:block; font-family:'IBM Plex Mono',monospace; font-size:8.5px; letter-spacing:.12em; color:var(--accent); margin-top:5px; opacity:.6; }
+
+  tbody tr.cat-row td{
+    background:var(--ink); font-family:'Inter',sans-serif; font-size:12px;
+    letter-spacing:.04em; color:#fff; font-weight:600;
+    padding:9px 16px;
+    cursor:pointer; user-select:none;
+    border-left:4px solid var(--accent);
+  }
+  tbody tr.cat-row td:hover{ background:#2a2a2a; }
+  tbody tr.cat-row td::before{
+    content:'▾'; display:inline-block; margin-right:10px; transition:transform .2s;
+    color:var(--accent); font-size:10px;
+  }
+  tbody tr.cat-row.cat-collapsed td::before{ transform:rotate(-90deg); }
+  tbody tr.cat-row.cat-collapsed td{ background:#262626; }
+  tbody tr.cat-row.cat-collapsed td::after{
+    content:attr(data-count) ' Komponenten'; margin-left:12px;
+    font-family:'Inter',sans-serif; font-size:11px; color:rgba(255,255,255,.6); font-weight:400;
+  }
+  tr.feat-row.cat-collapsed-hide{ display:none; }
+  tbody td{ border-bottom:1px solid var(--line); padding:0; }
+  tbody td.feat-cell{
+    border-right:1px solid var(--line); padding:11px 14px; vertical-align:top;
+    position:sticky; left:0; z-index:2; background:var(--card);
+  }
+  /* Row-Hover-Highlight (auch fuer die sticky feat-cell) */
+  tbody tr.feat-row:hover td{ background:#fafafa; }
+  tbody tr.feat-row:hover td.feat-cell{ background:#f4f4f5; }
+  tbody tr.feat-row.open td.feat-cell{ background:#fafafa; }
+  tbody td.mark-cell{
+    text-align:center; vertical-align:middle; border-right:1px solid var(--line); min-width:90px;
+  }
+  tbody td.mark-cell:last-child{ border-right:0; }
+
+  .feat-top{ display:flex; align-items:flex-start; gap:8px; }
+  .feat-name{ font-size:14px; font-weight:500; cursor:pointer; flex:1; }
+  .feat-name:hover{ color:var(--accent); }
+  .chevron{ transition:.2s; opacity:.4; flex-shrink:0; margin-top:3px; }
+  tr.open .chevron{ transform:rotate(90deg); opacity:.8; }
+  .feat-desc{
+    font-size:12.5px; color:var(--ink-soft); line-height:1.55; margin-top:7px;
+    max-height:0; overflow:hidden; transition:max-height .25s ease, margin .25s ease;
+  }
+  tr.open .feat-desc{ max-height:140px; margin-top:8px; }
+  .learn-link{
+    display:inline-flex; align-items:center; gap:5px; margin-top:9px; font-size:11.5px;
+    color:var(--accent); text-decoration:none; font-weight:600;
+    font-family:'IBM Plex Mono',monospace; letter-spacing:.02em;
+  }
+  .learn-link:hover{ text-decoration:underline; }
+
+  .mark{ display:inline-flex; }
+  .mark.in svg{ color:var(--in); }
+  .mark.out{ color:var(--out); font-weight:700; font-size:16px; }
+  .badge-new{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:500; letter-spacing:.06em;
+    color:#fff; background:var(--accent); padding:3px 7px; border-radius:6px; text-transform:uppercase;
+  }
+  td.hl-in{ background:var(--in-bg); }
+  td.hl-new{ background:var(--accent-soft); }
+  tr.feat-row.hide{ display:none; }
+  tr.cat-row.hide{ display:none; }
+
+  /* ---- Lizenz-Detail-Ansicht ---- */
+  .detail-view{ border-radius:16px; }
+  .detail-hero{
+    background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+    color:#fff; padding:32px 28px; border-radius:16px; box-shadow:0 1px 0 rgba(0,0,0,.03), 0 20px 50px -20px rgba(226,0,116,.45);
+    margin-bottom:24px; position:sticky; top:8px; z-index:10; overflow:hidden;
+  }
+  .detail-hero::after{
+    content:''; position:absolute; top:-50%; right:-15%; width:420px; height:420px;
+    background:radial-gradient(circle, rgba(255,255,255,.18) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .detail-hero-fam{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.16em;
+    text-transform:uppercase; opacity:.6; margin-bottom:9px;
+  }
+  .detail-hero-name{
+    font-family:'Inter',sans-serif; font-weight:800; font-size:clamp(28px,4vw,40px);
+    line-height:1; letter-spacing:-.025em; margin:0 0 18px;
+  }
+  .detail-hero-stats{ display:flex; gap:30px; flex-wrap:wrap; position:relative; z-index:1; }
+  .detail-hero-stat .num{
+    font-family:'Inter',sans-serif; font-weight:800; font-size:30px; line-height:1;
+    color:#fff; letter-spacing:-.02em;
+  }
+  .detail-hero-stat .lbl{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; opacity:.65; margin-top:6px; display:block;
+  }
+  .detail-hero-stat.accent .num{ color:#ffd6e8; }
+
+  .detail-empty{
+    padding:50px 24px; text-align:center; color:var(--ink-soft);
+    background:var(--card); border:1px dashed var(--line); border-radius:16px; font-size:14px;
+  }
+
+  .detail-section{ margin-top:26px; }
+  .detail-section-head{
+    display:flex; align-items:center; gap:10px; margin-bottom:14px;
+    border-bottom:1px solid var(--line); padding-bottom:11px;
+  }
+  .section-dot{
+    width:14px; height:14px; border-radius:3px; background:var(--accent);
+    flex-shrink:0;
+  }
+  .detail-section-title{
+    font-family:'Inter',sans-serif; font-size:17px; font-weight:700;
+    letter-spacing:-.015em; color:var(--ink); margin:0;
+  }
+  .detail-section-count{
+    margin-left:auto;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft);
+  }
+
+  .tile-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:12px;
+  }
+  .tile{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:14px 15px; transition:.18s; cursor:default; display:flex; flex-direction:column;
+    position:relative; box-shadow:0 1px 0 rgba(11,16,32,.02);
+  }
+  .tile:hover{ border-color:var(--ink); transform:translateY(-1px); box-shadow:var(--shadow); }
+  .tile-cat{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-soft); opacity:.7; margin-bottom:6px;
+  }
+  .tile-name{
+    font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:14px;
+    color:var(--ink); line-height:1.25; margin-bottom:7px;
+  }
+  .tile-desc{
+    font-size:12px; color:var(--ink-soft); line-height:1.5; flex:1;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .tile-foot{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    margin-top:10px; padding-top:9px; border-top:1px dashed var(--line);
+  }
+  .tile-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.08em;
+    text-transform:uppercase; font-weight:600; padding:3px 8px; border-radius:999px;
+  }
+  .tile-badge.in{ color:var(--in); background:var(--in-bg); }
+  .tile-badge.addon{ color:var(--accent); background:var(--accent-soft); }
+  .tile-link{
+    color:var(--ink-soft); font-size:11px; text-decoration:none; opacity:.7;
+    transition:.15s; font-family:'IBM Plex Mono',monospace;
+  }
+  .tile-link:hover{ color:var(--accent); opacity:1; }
+  .tile.addon{ background:#fdf2f8; border-color:#f9c8de; }
+
+  /* ---- Smart-Search Ergebnis-Ansicht ---- */
+  .search-view{ }
+  .search-hero{
+    background:linear-gradient(135deg, var(--ink) 0%, #2a2a2a 100%);
+    color:#fff; padding:24px 28px; border-radius:16px; margin-bottom:22px;
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    box-shadow:0 1px 0 rgba(0,0,0,.03), 0 14px 36px -18px rgba(0,0,0,.4);
+    position:sticky; top:8px; z-index:10; overflow:hidden;
+  }
+  .search-hero::after{
+    content:''; position:absolute; top:-50%; right:-10%; width:340px; height:340px;
+    background:radial-gradient(circle, rgba(226,0,116,.22) 0%, transparent 70%);
+    pointer-events:none;
+  }
+  .search-hero-meta{ position:relative; z-index:1; }
+  .search-hero-label{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; opacity:.6; margin-bottom:7px;
+  }
+  .search-hero-query{
+    font-family:'Inter',sans-serif; font-weight:800;
+    font-size:clamp(22px,3vw,30px); letter-spacing:-.025em; margin:0; line-height:1.05;
+  }
+  .search-hero-count{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; background:var(--accent); color:#fff;
+    padding:7px 14px; border-radius:999px; font-weight:600; flex-shrink:0;
+    position:relative; z-index:1;
+  }
+  .search-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px;
+    margin-bottom:18px;
+  }
+  .search-section-head{
+    display:flex; align-items:center; gap:10px; margin-top:18px; margin-bottom:12px;
+    padding-bottom:9px; border-bottom:1px solid var(--line);
+  }
+  .search-section-head:first-of-type{ margin-top:0; }
+  .search-section-title{
+    font-family:'Inter',sans-serif; font-size:15px; font-weight:700;
+    letter-spacing:-.01em; color:var(--ink); margin:0;
+  }
+  .search-section-count{
+    margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft);
+  }
+  .search-card.plan-result{
+    border-left:4px solid var(--fam-c, var(--accent));
+  }
+  .search-card.plan-result:hover{ border-left-color:var(--fam-c, var(--accent)); }
+  .search-card-action{
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:600;
+    padding:6px 12px; border-radius:8px; border:1px solid var(--ink);
+    background:var(--ink); color:#fff; cursor:pointer; transition:.15s;
+    text-decoration:none; display:inline-flex; align-items:center; gap:5px;
+  }
+  .search-card-action:hover{ background:#000; }
+  .search-card-stats{
+    display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);
+    line-height:1.5; margin-top:3px;
+  }
+  .search-card-stats b{ color:var(--ink); font-weight:700; }
+  .search-card{
+    background:var(--card); border:1px solid var(--line);
+    border-left:4px solid var(--accent); border-radius:12px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:7px;
+    transition:.15s;
+  }
+  .search-card:hover{
+    border-color:var(--ink); border-left-color:var(--accent);
+    transform:translateY(-1px); box-shadow:var(--shadow);
+  }
+  .search-card-cat{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-soft); opacity:.8;
+  }
+  .search-card-name{
+    font-family:'Inter',sans-serif; font-weight:700; font-size:15px;
+    color:var(--ink); line-height:1.2; letter-spacing:-.01em;
+  }
+  .search-card-desc{
+    font-size:12.5px; color:var(--ink-soft); line-height:1.5;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;
+    overflow:hidden; flex:1;
+  }
+  .search-card-foot{
+    margin-top:8px; padding-top:9px; border-top:1px dashed var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .search-card-badges{
+    display:flex; flex-wrap:wrap; gap:4px; align-items:center;
+  }
+  .search-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.04em;
+    font-weight:700; padding:3px 7px; border-radius:999px;
+    background:color-mix(in srgb, var(--c, var(--ink-soft)) 12%, #fff);
+    color:var(--ink);
+    border:1px solid color-mix(in srgb, var(--c, var(--ink-soft)) 40%, #fff);
+    cursor:pointer; transition:.15s;
+    font-family:inherit;
+  }
+  .search-badge:hover{
+    background:color-mix(in srgb, var(--c, var(--ink-soft)) 22%, #fff);
+    border-color:color-mix(in srgb, var(--c, var(--ink-soft)) 60%, #fff);
+  }
+  .search-badge.is-selected{
+    background:var(--c, var(--accent)); color:#fff;
+    border-color:var(--c, var(--accent));
+  }
+  .search-badge.is-selected::before{ content:'✓ '; }
+  .search-badge.addon-only{
+    background:var(--accent-soft); color:var(--accent-dark);
+    border-color:#f9c8de; padding:3px 9px;
+    cursor:default;
+  }
+  .search-badge.addon-only:hover{ background:var(--accent-soft); border-color:#f9c8de; }
+  .search-no-plan{
+    font-family:'Inter',sans-serif; font-size:11px; color:var(--ink-soft); font-style:italic;
+  }
+  .search-empty{
+    padding:48px 24px; text-align:center; color:var(--ink-soft);
+    background:var(--card); border:1px dashed var(--line); border-radius:16px;
+  }
+
+  .foot{ margin-top:24px; font-size:12px; color:var(--ink-soft); line-height:1.6; border-top:1px solid var(--line); padding-top:16px; }
+  .foot strong{ color:var(--ink); }
+  .empty{ padding:40px; text-align:center; color:var(--ink-soft); font-size:14px; }
+
+}
+
+/* ============ SALES SUPPORTER (gekapselt) ============ */
+#view-sales {
+
+& {
+  --magenta: #E20074;
+  --magenta-700: #b3005c;
+  --magenta-50: #fce7f3;
+  --magenta-glow: rgba(226,0,116,0.18);
+
+  --ink: #0f0f14;
+  --ink-2: #2a2a32;
+  --ink-3: #4a4a55;
+  --ink-4: #71717a;
+  --ink-5: #9ca3af;
+
+  --paper: #ffffff;
+  --paper-2: #fafafb;
+  --paper-3: #f4f4f6;
+  --paper-4: #ebebef;
+
+  --border: #e6e6ea;
+  --border-2: #d8d8de;
+
+  --crit: #d32626;
+  --crit-bg: #fff5f5;
+  --warn: #c2530a;
+  --warn-bg: #fff8eb;
+  --info: #E20074;
+  --info-bg: #fdeef6;
+  --okay: #047857;
+  --okay-bg: #ecfdf5;
+
+  --tier-do: #047857;
+  --tier-do-bg: #ecfdf5;
+  --tier-ws: #E20074;
+  --tier-ws-bg: #fce7f3;
+  --tier-pj: #0f0f14;
+  --tier-pj-bg: #ebebef;
+
+  --shadow-1: 0 1px 2px rgba(15,15,20,0.04);
+  --shadow-2: 0 4px 14px rgba(15,15,20,0.06);
+  --shadow-3: 0 16px 40px rgba(15,15,20,0.10);
+  --shadow-magenta: 0 10px 30px -10px rgba(226,0,116,0.35);
+
+  --font-display: 'Inter Tight', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+& * { box-sizing: border-box; margin: 0; padding: 0; }
+
+& {
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.005em;
+}
+
+& {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(15,15,20,0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  background-attachment: fixed;
+}
+
+& button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+& input { font-family: inherit; }
+
+/* ========== TOP NAV ========== */
+.topnav {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 60;
+}
+
+.topnav-inner {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-T {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: block;
+  object-fit: cover;
+  box-shadow: 0 4px 14px var(--magenta-glow);
+}
+
+.brand-meta h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.brand-meta p {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-4);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--paper);
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--paper-3);
+  border-color: var(--ink-5);
+  color: var(--ink);
+}
+
+.btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  color: white;
+}
+
+.btn-armed {
+  background: var(--crit);
+  border-color: var(--crit);
+  color: white;
+  animation: pulse 1s ease infinite;
+}
+
+
+
+.btn svg { width: 13px; height: 13px; }
+
+.btn-icon {
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+}
+
+/* ========== HERO ========== */
+.hero {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--magenta);
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  top: -100px;
+  right: -100px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--magenta-glow) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.hero-inner {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 32px 32px 28px 36px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 32px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-left .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-left .eyebrow::before {
+  content: '';
+  width: 16px;
+  height: 1px;
+  background: var(--magenta);
+}
+
+.hero-left h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1.0;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.hero-left h2 .accent {
+  background: linear-gradient(135deg, var(--magenta) 0%, #ff2d97 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-left p {
+  font-size: 14.5px;
+  color: var(--ink-3);
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  align-items: stretch;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  position: relative;
+  padding-left: 24px;
+}
+
+.hero-stat::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border-2);
+}
+
+.hero-stat[data-emph="true"]::before {
+  background: var(--magenta);
+}
+
+.hero-stat-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hero-stat[data-emph="true"] .hero-stat-num {
+  color: var(--magenta);
+}
+
+.hero-stat-lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-top: 6px;
+  font-weight: 500;
+}
+.hero-stat-tier {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  height: 38px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.hero-stat-tier-name {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ink-4);
+  letter-spacing: 0;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; gap: 22px; padding: 24px 22px 24px 26px; }
+  .hero-left h2 { font-size: 32px; }
+  .hero-stats { justify-content: flex-start; gap: 22px; }
+  .hero-stat-num { font-size: 28px; }
+}
+
+/* ========== MAIN ========== */
+main {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 28px 32px 60px;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 24px;
+}
+
+@media (max-width: 1000px) {
+  main { grid-template-columns: 1fr; padding: 20px; gap: 20px; }
+}
+
+@media (max-width: 600px) {
+  .topnav-inner { padding: 12px 18px; gap: 10px; }
+  .brand-meta p { display: none; }
+  main { padding: 16px; }
+}
+
+/* ========== PANEL ========== */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+
+.panel-head {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  background: var(--paper);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-title-square {
+  width: 8px;
+  height: 8px;
+  background: var(--magenta);
+}
+
+.panel-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ========== INPUT LIST ========== */
+.input-list {
+  max-height: calc(100vh - 270px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+.input-list::-webkit-scrollbar { width: 6px; }
+.input-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+.input-list::-webkit-scrollbar-track { background: transparent; }
+
+.cat {
+  border-bottom: 1px solid var(--border);
+}
+.cat:last-child { border-bottom: none; }
+
+.cat-head {
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.cat-head:hover { background: var(--paper-3); }
+
+.cat-head::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 24px;
+  background: var(--magenta);
+  transition: transform 0.18s ease;
+}
+
+.cat[data-has-data="true"] .cat-head::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
+.cat-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.cat-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cat-count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--magenta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.chev {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-4);
+  transition: transform 0.2s ease;
+}
+
+.cat[data-open="false"] .chev { transform: rotate(-90deg); }
+.cat[data-open="false"] .cat-body { display: none; }
+
+.cat-body {
+  padding: 4px 16px 16px;
+  display: grid;
+  gap: 2px;
+}
+
+.sku {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.sku:hover { background: var(--paper-3); }
+.sku[data-active="true"] { background: var(--magenta-50); }
+
+.sku[data-active="true"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: var(--magenta);
+  border-radius: 0 2px 2px 0;
+}
+
+.sku-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.sku-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
+.sku-cap {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: #fff5e6;
+  color: #c2530a;
+  border: 1px solid #fde4ba;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* qty */
+.qty {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--paper);
+  height: 34px;
+  overflow: hidden;
+  transition: all 0.15s;
+}
+
+.qty:focus-within {
+  border-color: var(--magenta);
+  box-shadow: 0 0 0 3px var(--magenta-50);
+}
+
+.qty-btn {
+  width: 28px;
+  height: 32px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: all 0.1s;
+}
+
+.qty-btn:hover { background: var(--paper-3); color: var(--ink); }
+.qty-btn:active { background: var(--magenta); color: white; }
+
+.qty-input {
+  width: 88px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--ink);
+  outline: none;
+  -moz-appearance: textfield;
+  cursor: text;
+}
+.qty-input::placeholder { color: var(--ink-5); font-weight: 400; }
+.qty-input::-webkit-inner-spin-button,
+.qty-input::-webkit-outer-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+
+/* ========== FINDINGS ========== */
+.findings-area {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--ink-4);
+}
+
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--magenta-50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  color: var(--magenta);
+}
+
+.empty-icon svg { width: 22px; height: 22px; }
+
+.empty h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+  letter-spacing: -0.015em;
+}
+
+.empty p {
+  font-size: 13.5px;
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+/* finding card */
+.finding {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 16px 18px 14px;
+  position: relative;
+  animation: rise 0.32s cubic-bezier(0.2,0.9,0.3,1) backwards;
+  transition: all 0.18s;
+}
+
+.finding:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+
+
+
+.finding-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.sev-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sev-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.finding[data-sev="critical"] .sev-badge { background: var(--crit-bg); color: var(--crit); }
+.finding[data-sev="warning"] .sev-badge { background: var(--warn-bg); color: var(--warn); }
+.finding[data-sev="info"] .sev-badge { background: var(--info-bg); color: var(--info); }
+.finding[data-sev="ok"] .sev-badge { background: var(--okay-bg); color: var(--okay); }
+
+.finding-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  font-weight: 500;
+}
+
+.finding-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15.5px;
+  color: var(--ink);
+  letter-spacing: -0.015em;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.finding-text {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.finding-anchor {
+  font-size: 13px;
+  color: var(--ink-2);
+  padding: 11px 13px;
+  background: var(--paper-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  border-left: 3px solid var(--magenta);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.finding-anchor strong { color: var(--ink); font-weight: 600; }
+
+.finding-service-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-weight: 500;
+  padding: 4px 9px;
+  background: var(--paper-3);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.finding-service-tag strong { color: var(--magenta); font-weight: 600; }
+.finding-service-tag svg { width: 11px; height: 11px; color: var(--magenta); }
+
+/* ========== SERVICES SECTION ========== */
+.services-section {
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--paper-2) 0%, var(--paper-3) 100%);
+  padding: 24px;
+}
+
+.services-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+}
+
+.services-head h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.services-head h3::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background: var(--magenta);
+  border-radius: 2px;
+  position: relative;
+  top: 1px;
+}
+
+.services-head .lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+  transition: all 0.18s;
+}
+
+.service:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-2);
+}
+
+.service[data-open="true"] {
+  border-color: var(--magenta);
+  box-shadow: var(--shadow-magenta);
+}
+
+.service-head {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.service-head:hover { background: var(--paper-2); }
+
+.service-rank {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  transition: all 0.18s;
+}
+
+.service[data-open="true"] .service-rank {
+  background: var(--magenta);
+}
+
+.service-info { min-width: 0; }
+
+.service-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.service-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.tier-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+.tier-pill[data-tier="door_opener"] { background: var(--tier-do-bg); color: var(--tier-do); }
+.tier-pill[data-tier="workshop"] { background: var(--tier-ws-bg); color: var(--tier-ws); }
+.tier-pill[data-tier="project"] { background: var(--tier-pj-bg); color: var(--tier-pj); }
+
+.service-tagline {
+  font-size: 12.5px;
+  color: var(--ink-4);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.service[data-open="true"] .service-tagline {
+  -webkit-line-clamp: unset;
+}
+
+.service-trigger-pill {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--magenta);
+  background: var(--magenta-50);
+  border: 1px solid var(--magenta);
+  padding: 4px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.service-trigger-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--magenta);
+  box-shadow: 0 0 0 3px rgba(226,0,116,0.18);
+}
+
+.service-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--paper-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  transition: all 0.18s;
+}
+
+.service-toggle svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.2s;
+}
+
+.service[data-open="true"] .service-toggle {
+  background: var(--ink);
+  color: white;
+}
+.service[data-open="true"] .service-toggle svg {
+  transform: rotate(180deg);
+}
+
+.service-detail {
+  display: none;
+  padding: 4px 16px 18px 60px;
+  border-top: 1px solid var(--border);
+  background: var(--paper-2);
+  animation: slideDown 0.25s ease;
+}
+
+.service[data-open="true"] .service-detail { display: block; }
+
+
+
+.detail-block {
+  margin-top: 18px;
+}
+
+.detail-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.detail-label::before {
+  content: '';
+  width: 12px;
+  height: 1px;
+  background: var(--magenta);
+}
+
+.trigger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trigger-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.trigger-sev-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.trigger-item[data-sev="critical"] .trigger-sev-dot { background: var(--crit); }
+.trigger-item[data-sev="warning"] .trigger-sev-dot { background: var(--warn); }
+.trigger-item[data-sev="info"] .trigger-sev-dot { background: var(--info); }
+.trigger-item[data-sev="ok"] .trigger-sev-dot { background: var(--okay); }
+
+.trigger-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  background: var(--paper-3);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.opener-block {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--magenta);
+  border-radius: 8px;
+  padding: 13px 15px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+  font-style: italic;
+  position: relative;
+}
+
+.opener-block::before {
+  content: '"';
+  position: absolute;
+  top: -2px;
+  left: 8px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--magenta);
+  line-height: 1;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.opener-block-content {
+  padding-left: 18px;
+}
+
+.questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.question-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  transition: all 0.15s;
+}
+
+.question-item:hover {
+  border-color: var(--magenta);
+  background: var(--paper-2);
+}
+
+.question-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--magenta);
+  background: var(--magenta-50);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .service-head { grid-template-columns: auto 1fr auto; }
+  .service-trigger-pill { grid-column: 1 / -1; justify-self: flex-start; }
+  .service-detail { padding-left: 16px; }
+}
+
+/* ========== TOAST ========== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--ink);
+  color: white;
+  padding: 11px 18px;
+  border-radius: 9px;
+  font-size: 13px;
+  z-index: 999;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.2,0.9,0.3,1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--shadow-3);
+  font-weight: 500;
+}
+
+.toast svg { width: 14px; height: 14px; color: #4ade80; }
+
+.toast[data-show="true"] {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+}
+
+/* ---- Sales-Keyframes (global) ---- */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(211,38,38,0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(211,38,38,0); }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+</style>
+</head>
+<body>
+<!-- ============ LANDING / TOOL-AUSWAHL ============ -->
+<section id="landing">
+  <div class="lp-bg" aria-hidden="true">
+    <span class="lp-blob lp-blob-1"></span>
+    <span class="lp-blob lp-blob-2"></span>
+    <span class="lp-blob lp-blob-3"></span>
+    <div class="lp-grid"></div>
+    <div class="lp-noise"></div>
+  </div>
+
+  <div class="lp-inner">
+    <header class="lp-head">
+      <div class="lp-eyebrow"><span class="lp-eyebrow-dot"></span>Microsoft 365 · Toolkit</div>
+      <h1 class="lp-title">M365&nbsp;<span class="lp-title-accent">Explorer</span></h1>
+      <p class="lp-sub">Zwei Werkzeuge, eine Oberfläche. Wähle dein Tool — der Rest kommt von selbst.</p>
+    </header>
+
+    <div class="lp-cards">
+      <button class="lp-card" data-go="sales" type="button">
+        <div class="lp-card-glow" aria-hidden="true"></div>
+        <div class="lp-card-top">
+          <span class="lp-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M2 13h20"/></svg>
+          </span>
+          <span class="lp-card-tag">Vertrieb</span>
+        </div>
+        <h2 class="lp-card-name">Sales Supporter</h2>
+        <p class="lp-card-desc">Lizenzbestand des Kunden erfassen, Lücken und Doppellizenzierung erkennen, passende Door-Opener-Themen und Discovery-Fragen ableiten.</p>
+        <span class="lp-card-go">Öffnen
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </span>
+      </button>
+
+      <button class="lp-card" data-go="explorer" type="button">
+        <div class="lp-card-glow" aria-hidden="true"></div>
+        <div class="lp-card-top">
+          <span class="lp-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
+          </span>
+          <span class="lp-card-tag">Lizenzen</span>
+        </div>
+        <h2 class="lp-card-name">Lizenz-Explorer</h2>
+        <p class="lp-card-desc">Microsoft-365-Pläne und Add-ons direkt vergleichen — enthaltene Komponenten, nur die Unterschiede, Detailansicht und PDF-Export.</p>
+        <span class="lp-card-go">Öffnen
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </span>
+      </button>
+    </div>
+
+    <footer class="lp-foot">
+      <span class="lp-beta">BETA</span>
+      <span class="lp-foot-text">Komponenten basierend auf offiziellen Microsoft-Service-Beschreibungen · Stand Mai 2026 · kein Ersatz für die verbindlichen Microsoft-Lizenzbedingungen.</span>
+    </footer>
+  </div>
+</section>
+
+
+<section id="view-explorer" class="tool-view">
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">
+        <h1 class="brand-title">Microsoft 365 Lizenz&#8209;Explorer <span class="beta-badge" title="Test-Phase – melde Fehler oder Verbesserungsideen">BETA</span></h1>
+        <div class="brand-sub">M365 · Lizenzvergleich · Stand Mai 2026</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="hdr-btn ghost" id="hdrReset" title="Auswahl, Suche und Modus zuruecksetzen">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        Reset
+      </button>
+    </div>
+  </header>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="picker">
+    <div class="picker-label">Lizenzen & Add-ons auswählen (zum Vergleichen)</div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="controls">
+    <div class="seg modes" role="group" aria-label="Ansicht">
+      <button data-mode="overview" aria-pressed="true">Übersicht</button>
+      <button data-mode="diff" aria-pressed="false">Nur Unterschiede</button>
+      <button data-mode="detail" aria-pressed="false">Lizenz im Detail</button>
+    </div>
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="q" type="search" placeholder="Komponente suchen … z.B. Defender, Intune, Bookings" autocomplete="off">
+    </div>
+    <span class="count-pill" id="count"></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot in"></i> enthalten</span>
+    <span><i class="dot out"></i> nicht enthalten</span>
+    <span id="newleg" style="display:none"><i class="dot new"></i> neu ggü. der linken Nachbarspalte</span>
+    <span style="margin-left:auto">Tipp: Komponente anklicken für Erklärung &amp; Doku-Link</span>
+  </div>
+
+  <div class="table-scroll" id="tableWrap">
+    <table id="tbl"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+  </div>
+
+  <div class="detail-view" id="detailView" hidden></div>
+  <div class="search-view" id="searchView" hidden></div>
+
+  <div class="foot">
+    <strong>Hinweis:</strong> Komponentenübersicht zur Orientierung, basierend auf den offiziellen Microsoft-Service-Beschreibungen (Stand 2026). Kein Ersatz für die verbindlichen Microsoft-Lizenzbedingungen. Vor verbindlichen Entscheidungen stets gegen die aktuelle Microsoft-Dokumentation prüfen.
+  </div>
+
+</div>
+
+
+</section>
+
+<section id="view-sales" class="tool-view">
+
+
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="brand">
+      <img class="logo-T" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAGc0lEQVR42u2cXWhcRRTH/+fM3Lu7Sb8Sa0ubUhRj/XjzG6lgQR+sYKGKgijoU98F0VdfBd+lJVIF9UUU9UWxCBZsi6a2ImhNaW2pTdIkJlnTTbP33pk5PuwmLXaza9m5m62ZeZ6de/Z3z9ecOXPpgn4LxiGMhkMzBwjNRwAUAAVAAVAAFAAFQAFQABRGABQABUABUAAUAP3Phva2ElF3/TORrgIkIrar+BAYoC4AxCQuje/e0v/BsxAvIrX/sgDCzCufpb+PE8dwsuIaJLS2ED880F0atLYASNeYmBVYaa1BIiICtziNiKiV8xIRWXQoAjCIqNVPAAJsV/kgAhQ1A+QEItB84ybYCIZ1IMJyi9XE8GTsOn+PIHCAIoDcXJKdHEtPjGUj025i3s3NR3ds6juwpzFZAQiz+77Mzk7yul7e3BvddUt8/9bovq28rlBXW849euYMyAmYoJAOj1YODC98ddqOlgWm5t4FaXG82nyB5PsL1VN/EGLAASBoNbChtHvHmn0PxQ8NXH3ETQnIOih2U1dm3/x6/v0TIikhJo6JCzXTEadoTdzCwNbErErEhbobcmJH5y4PHa28d7z31fv73n6Kb+2pPehmA2QFitOfxv96/qPs3ARTL+kIVuCkHneZ4FzrGOwE1kGuziTSpCJYqRw8lnz3x8ZPXoof2AIrULnoEedlWYqyny9NPjlkzs1wtBYiMM5Pdru4FEdrzbmZySeHsp8vQVGb+U4HAYkAcLMLU3s/duUrpAvI8kmyM0u64MpXpvZ+7GYXPG4vcgbkBEzlNw5l58cpKuXbGWEcRaXs/Hj5jUPgXJSI83A92a+T8weHWfXA5L9BM5ZVz/zB4ezXSSj2lR/mBkgEQOXdYWcTEENy5wMBiJ1NKu8O52Fl7FlYzbJgFr4YIcQ5ec2GRk2IF74YkQUDzfD6Wtiz9wGyXy6Zi9NEuqOASJuL09kvl5bE6EZA4gAgPTEuyHLKSpYdigRZemJ8SYzujWLm9PRKlTjyeLQnQIJ6lmzFjl1eoboZ2bHLS2L4ckSethqaoIiUAiBVU0fWyVGrF1XNkhjQ1D2ASP5OkiMXaiminagAaiUAKTtRWRJD/k66oybthBBlI1MTj+1frJ0pRgTX2dZi5xhR+sOf14pBiNqPaL5280QcXRvsV2j4F8NfuWMlueQoRjhZ7YwGEdCyab9Wt/dkSa3LrM55CRSeAIlzttqKYURQnnbERmzWyjRiL/ahPeiOON7QU3r83uYT0+NjZrRMpNrSIyIRqwf64ge3Np+YHD7vylfaryi0D4hEjN5xy8bPX2w+ceblTy9/9COpHpg2RFYkJi3uuq3/w+eaT5x45EDy4xxRoU279mRiplZaXyY1sw6KJfVWPJPUwrplDzNqYpiuO1nlZierin2e8BHV0TQB5OlpIcwHQAFQABQABUCrfi8GQJavcor4PxSurdlwWelCQEwgWjb10KqWBHuTWhGI6ss2TMrgrbHKU0Xxt6mJnUNNXh0RspFpRgzbXqXROkZc/ebs5M6hZkpJyE5NdU9FkWQ+SY6ebZVsa6Dtw2gBwG66Uj1ablk86I6a9KKG1PvGmuqaN+9A3LHH+aoHwXtbRZc8LoT5ACgACoBWJ6BaCNa8fPIrVyfQatQgEghvKAK1Jvrr4zQA8IairOg1qxXVIHJ6sL++sWq42wL0YD/IrUoNEkCosOv25rMKu26HEGS1AdIsNom2bSrtHoRI49q7YoiUdg9G2zaJTRa91f8SkCIohmJohmYoFpMA6Nu/h3rjq/frrrdBB+qN+/c/A0BMcu0KUNyZNkj1Gu/KuzFDJBXJRIy4TFwqYuN7Nm/84IXS03fWbnU0q6I40Ts2Fh7enp4cM5Nlcak4I2JEDMT6OstuIgDl/B1FgVKFR7chUqSJ+op6sL+wc3vxiUEqqP961avWMZbY6rdnkiMXzJkZma2KEWQ2OXYR1uYY4zTnCYgAcbSutHX0db7+XtgNXWBqNNlV0rGBd2RuIceWfs0duJIJmUukoCEOqN9rpVoF8oZ25MaJW0qJBMQyl3QguuUPiEDrixRx2wHh3zVUWl/sQH6UPyDjksPnua8IEW/H8yIgcrPVDnyFljrwsdvFW7x5aGfOL7gTPgggivLLIG5+E+vI3wj1oAAoAAqAAqAAKIwAKAAKgAKgACgACoACoDACoP84NJhy/czeTa4/9A9Keuz/z9zHrgAAAABJRU5ErkJggg==" alt="Deutsche Telekom" />
+      <div class="brand-meta">
+        <h1>Microsoft Sales Supporter</h1>
+        <p>M365 · Account Insights</p>
+      </div>
+    </div>
+    <div class="topnav-actions">
+      <button class="btn" id="btn-reset" title="Zurücksetzen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        <span id="btn-reset-label">Reset</span>
+      </button>
+      <button class="btn btn-primary" id="btn-copy" title="Notizen kopieren">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Notizen exportieren
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-left">
+      <div class="eyebrow">Microsoft 365 Sales Tool</div>
+      <h2>Vom Bestand<br>zum <span class="accent">Gespräch.</span></h2>
+      <p>Lizenzbestand des Kunden eingeben, Lücken und Doppellizenzierung erkennen, passende Door-Opener-Themen und Beratungsleistungen direkt vorschlagen.</p>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat" data-emph="true">
+        <div class="hero-stat-num"><span id="stat-total">0</span></div>
+        <div class="hero-stat-lbl">Total Seats</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-tier" id="stat-tier-label">–</div>
+        <div class="hero-stat-lbl">Größentier</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num"><span id="stat-findings">0</span></div>
+        <div class="hero-stat-lbl">Findings</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num"><span id="stat-services">0</span></div>
+        <div class="hero-stat-lbl">Services</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main>
+  <!-- INPUT -->
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="panel-title-square"></span>Lizenzbestand</div>
+      <div class="panel-sub">SKU · Menge eintippen</div>
+    </div>
+    <div class="input-list" id="input-list"></div>
+  </section>
+
+  <!-- OUTPUT -->
+  <section class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="panel-title-square"></span>Empfehlungen</div>
+      <div class="panel-sub" id="findings-count">Keine Daten</div>
+    </div>
+    <div class="findings-area" id="findings"></div>
+    <div id="services-wrap"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  <span id="toast-msg"></span>
+</div>
+
+
+</section>
+
+<script src="data.js"></script>
+<script>
+(function(){
+
+const PLANS  = window.M365.plans;
+const ADDONS = window.M365.addons;
+const CATS   = window.M365.categories;
+const ALLCOLS = [...PLANS, ...ADDONS.map(a => ({...a, isAddon:true}))];
+
+// Standardauswahl: leer -- der Nutzer waehlt aktiv aus
+const DEFAULT_SELECTION = [];
+let selected = [...DEFAULT_SELECTION];
+let mode = 'overview';
+
+const PLAN_FAM_ORDER = ['Business', 'Office 365', 'Microsoft 365 Enterprise', 'Microsoft 365 Frontline', 'Office 365 Frontline'];
+const FAM_COLORS = {
+  'Business':                    '#2563eb',
+  'Office 365':                  '#0891b2',
+  'Microsoft 365 Enterprise':    '#d97706',
+  'Microsoft 365 Frontline':     '#16a34a',
+  'Office 365 Frontline':        '#0d9488',
+  'Add-ons (separat lizenziert)':'#e20074',
+  'Security & Compliance Suites':'#7c3aed'
+};
+const PRESETS = [
+  { label:'Business (BB/BS/BP)',         keys:['bb','bs','bp'] },
+  { label:'Office 365 (E1/E3/E5)',       keys:['oe1','oe3','oe5'] },
+  { label:'M365 Enterprise (E3/E5/E7)',  keys:['e3','e5','e7'] },
+  { label:'Frontline (F1/F3/O F3)',      keys:['f1','f3','of3'] },
+  { label:'Premium vs Enterprise',       keys:['bp','e3','e5'] },
+  { label:'E5 vs E7',                    keys:['e5','e7'] }
+];
+
+const presetsEl=document.getElementById('presets');
+const chips=document.getElementById('chips');
+const thead=document.getElementById('thead');
+const tbody=document.getElementById('tbody');
+const qInput=document.getElementById('q');
+const countPill=document.getElementById('count');
+const newLeg=document.getElementById('newleg');
+const tableWrap=document.getElementById('tableWrap');
+const detailView=document.getElementById('detailView');
+const searchView=document.getElementById('searchView');
+
+const CHECK='<span class="mark in"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>';
+const CROSS='<span class="mark out">–</span>';
+const EXT='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>';
+
+function escapeAttr(s){ return s.replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function buildPresets(){
+  let h='<span class="presets-label">Schnellauswahl:</span>';
+  PRESETS.forEach((p,i)=>{
+    h+=`<button class="preset-btn" data-idx="${i}">${p.label}</button>`;
+  });
+  presetsEl.innerHTML=h;
+  presetsEl.querySelectorAll('[data-idx]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      selected=[...PRESETS[btn.dataset.idx].keys];
+      buildChips(); rerender();
+    });
+  });
+}
+
+function resetAll(){
+  selected=[...DEFAULT_SELECTION];
+  mode='overview';
+  qInput.value='';
+  document.querySelectorAll('.seg.modes button').forEach(b=>{
+    b.setAttribute('aria-pressed', b.dataset.mode==='overview');
+  });
+  openFamilies.clear();
+  buildChips();
+  rerender();
+}
+
+function renderFamTile(famName, items){
+  const famColor = FAM_COLORS[famName] || 'var(--accent)';
+  const selCount = items.filter(it => selected.includes(it.key)).length;
+  const totalCount = items.length;
+  const hasSel = selCount > 0;
+  // Auto-Open beim ersten Render, wenn die Familie ausgewaehlte Plaene hat
+  // oder wenn der Nutzer sie schon mal manuell geoeffnet hat
+  const isOpen = openFamilies.has(famName) || hasSel;
+  if(isOpen) openFamilies.add(famName);
+
+  let body='';
+  items.forEach(it=>{
+    const label = it.short || it.name;
+    body += `<button class="chip${it._isAddon?' addon':''}" data-key="${it.key}" aria-pressed="${selected.includes(it.key)}">${label}</button>`;
+  });
+
+  return `<div class="fam-tile${isOpen?' open':''}${hasSel?' has-selected':''}" data-fam="${escapeAttr(famName)}" style="--fam-c:${famColor}">
+    <div class="fam-tile-head" data-action="toggle">
+      <span class="fam-tile-swatch" aria-hidden="true"></span>
+      <div class="fam-tile-meta">
+        <div class="fam-tile-name">${famName}</div>
+        <div class="fam-tile-count">${hasSel?`${selCount} von ${totalCount} ausgewählt`:`${totalCount} ${totalCount===1?'Eintrag':'Einträge'}`}</div>
+      </div>
+      <span class="fam-tile-chev">▾</span>
+    </div>
+    <div class="fam-tile-body">${body}</div>
+  </div>`;
+}
+
+const openFamilies = new Set(); // merkt sich manuell geoeffnete Familien-Kacheln
+
+function buildChips(){
+  let h='';
+
+  // Plan-Kacheln nach Familie
+  const byFam={};
+  PLANS.forEach(p=>{ (byFam[p.fam]=byFam[p.fam]||[]).push(p); });
+  PLAN_FAM_ORDER.forEach(fam=>{
+    if(!byFam[fam]) return;
+    h += renderFamTile(fam, byFam[fam]);
+  });
+
+  // Add-on-Kacheln (Singles und Suites)
+  const singles=ADDONS.filter(a=>!a.key.endsWith('suite')).map(a=>({...a, _isAddon:true, short:null}));
+  const suites =ADDONS.filter(a=> a.key.endsWith('suite')).map(a=>({...a, _isAddon:true, short:null}));
+  if(singles.length) h += renderFamTile('Add-ons (separat lizenziert)', singles);
+  if(suites.length)  h += renderFamTile('Security & Compliance Suites', suites);
+
+  chips.innerHTML=h;
+
+  // Kachel-Header zum Ein-/Ausklappen
+  chips.querySelectorAll('.fam-tile-head').forEach(head=>{
+    head.addEventListener('click',()=>{
+      const tile=head.closest('.fam-tile');
+      const fam=tile.dataset.fam;
+      const isOpen=tile.classList.toggle('open');
+      if(isOpen) openFamilies.add(fam); else openFamilies.delete(fam);
+    });
+  });
+
+  // Einzelne Chip-Buttons (Auswahl-Toggle)
+  chips.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click',(e)=>{
+      e.stopPropagation(); // verhindert, dass der Klick die Kachel zuklappt
+      const k=c.dataset.key;
+      if(selected.includes(k)) selected=selected.filter(x=>x!==k);
+      else selected=ALLCOLS.filter(col=>selected.includes(col.key)||col.key===k).map(col=>col.key); // Reihenfolge wahren
+      buildChips(); // neu rendern, damit Counts und has-selected aktualisiert werden
+      rerender();
+    });
+  });
+}
+
+function rerender(){
+  const q=qInput.value.trim().toLowerCase();
+  const picker=document.querySelector('.picker');
+  // Picker und Presets abdimmen, waehrend aktive Suche laeuft -- volle Sicht nur, wenn man drueber-hovert
+  picker.classList.toggle('search-active', !!q);
+  presetsEl.classList.toggle('search-active', !!q);
+
+  if(q){
+    // Aktive Suche: Tabelle/Detail aus, Search-View an
+    tableWrap.hidden=true;
+    detailView.hidden=true;
+    searchView.hidden=false;
+    renderSearch(q);
+    return;
+  }
+  searchView.hidden=true;
+  if(mode==='detail'){
+    tableWrap.hidden=true;
+    detailView.hidden=false;
+    renderDetail();
+  } else {
+    tableWrap.hidden=false;
+    detailView.hidden=true;
+    render();
+  }
+}
+
+function cols(){ return ALLCOLS.filter(c=>selected.includes(c.key)); }
+
+function render(){
+  const C=cols();
+  newLeg.style.display = mode==='upgrade' ? 'inline-flex' : 'none';
+
+  // header
+  let th='<tr><th class="feat-head"><span class="fh-title">Komponente</span><br><span class="fh-sub">'+CATS.length+' Kategorien</span></th>';
+  C.forEach(c=>{
+    const primary = c.short || c.name;
+    const secondary = c.short ? c.name : '';
+    th+=`<th class="${c.isAddon?'is-addon':''}" title="${escapeAttr(c.name)}">
+      <span class="plan-tag" style="color:${c.color}">${primary}</span>
+      ${secondary?`<span class="plan-name">${secondary}</span>`:''}</th>`;
+  });
+  th+='</tr>';
+  thead.innerHTML = C.length ? th : '';
+
+  if(!C.length){ tbody.innerHTML='<tr><td class="empty">Bitte mindestens eine Lizenz oben auswählen.</td></tr>'; countPill.textContent=''; return; }
+
+  let body='', rid=0;
+  CATS.forEach(group=>{
+    body+=`<tr class="cat-row"><td colspan="${C.length+1}" data-count="${group.items.length}">${group.cat}</td></tr>`;
+    group.items.forEach(it=>{
+      const vals=C.map(c=> it.in[c.key]?1:0);
+      const identical=vals.every(v=>v===vals[0]);
+      let cells='';
+      vals.forEach((v,i)=>{
+        let cls='mark-cell', inner=v?CHECK:CROSS;
+        if(mode==='upgrade'&&v){
+          const prev=i===0?0:vals[i-1];
+          if(!prev){ inner='<span class="badge-new">neu</span>'; cls+=' hl-new'; }
+          else cls+=' hl-in';
+        }
+        cells+=`<td class="${cls}">${inner}</td>`;
+      });
+      const learn = it.learn ? `<a class="learn-link" href="${it.learn}" target="_blank" rel="noopener">Microsoft Learn ${EXT}</a>` : '';
+      body+=`<tr class="feat-row" data-id="${rid}" data-name="${it.n.toLowerCase()} ${it.desc.toLowerCase()}" data-identical="${identical}">
+        <td class="feat-cell">
+          <div class="feat-top">
+            <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            <span class="feat-name">${it.n}</span>
+          </div>
+          <div class="feat-desc">${it.desc}${learn}</div>
+        </td>${cells}</tr>`;
+      rid++;
+    });
+  });
+  tbody.innerHTML=body;
+
+  tbody.querySelectorAll('.feat-name, .chevron').forEach(el=>{
+    el.addEventListener('click',()=> el.closest('tr').classList.toggle('open'));
+  });
+  // Kategorien-Header sind klickbar zum Zuklappen
+  tbody.querySelectorAll('.cat-row').forEach(catRow=>{
+    catRow.addEventListener('click',()=>{
+      catRow.classList.toggle('cat-collapsed');
+      const collapsed=catRow.classList.contains('cat-collapsed');
+      let n=catRow.nextElementSibling;
+      while(n && !n.classList.contains('cat-row')){
+        if(n.classList.contains('feat-row')){
+          n.classList.toggle('cat-collapsed-hide', collapsed);
+        }
+        n=n.nextElementSibling;
+      }
+    });
+  });
+  applyFilter();
+}
+
+function renderDetail(){
+  // Erste ausgewählte PLAN-Spalte (Add-ons werden ignoriert)
+  const planKey = selected.find(k => PLANS.some(p => p.key === k));
+  if(!planKey){
+    detailView.innerHTML = `<div class="detail-empty">Bitte oben mindestens eine Lizenz auswählen (Add-ons allein können hier nicht im Detail angezeigt werden).</div>`;
+    return;
+  }
+  const plan = PLANS.find(p => p.key === planKey);
+
+  // Sammle enthaltene Komponenten (aus allen Kategorien) und buchbare Add-ons
+  const included = []; // {cat, item}
+  CATS.forEach(group => {
+    group.items.forEach(it => {
+      if(it.in[planKey]) included.push({cat:group.cat, item:it});
+    });
+  });
+  // Add-ons aus dem ADDONS-Array, die fuer diesen Plan buchbar sind:
+  // (a) sind nicht bereits in dem Plan enthalten, UND
+  // (b) entweder kein for:-Feld (= ueberall anwendbar) ODER for: enthaelt planKey
+  const bookableAddons = ADDONS
+    .map(a => {
+      let comp = null;
+      CATS.forEach(group => group.items.forEach(it => { if(it.in[a.key]) comp = {cat:group.cat, item:it}; }));
+      return comp;
+    })
+    .filter(comp => {
+      if(!comp) return false;
+      if(comp.item.in[planKey]) return false;                              // bereits enthalten
+      if(comp.item.for && !comp.item.for.includes(planKey)) return false;  // nicht fuer diesen Plan zugeschnitten
+      return true;
+    });
+
+  const planFamCount = selected.filter(k => PLANS.some(p => p.key === k)).length;
+  const multiNote = planFamCount > 1
+    ? `<div class="detail-hero-stat"><span class="num" style="font-size:13px;line-height:1.4;opacity:.8">Hinweis</span><span class="lbl" style="text-transform:none;letter-spacing:0;font-family:inherit;opacity:.85">${planFamCount} Lizenzen ausgewählt, gezeigt wird nur ${plan.short}</span></div>`
+    : '';
+
+  let html = `
+    <div class="detail-hero" style="border-left:6px solid ${plan.color}">
+      <div class="detail-hero-fam">${plan.fam}</div>
+      <h2 class="detail-hero-name">${plan.name}</h2>
+      <div class="detail-hero-stats">
+        <div class="detail-hero-stat"><span class="num">${included.length}</span><span class="lbl">Enthaltene Komponenten</span></div>
+        <div class="detail-hero-stat accent"><span class="num">${bookableAddons.length}</span><span class="lbl">Add-ons buchbar</span></div>
+        ${multiNote}
+      </div>
+    </div>
+  `;
+
+  // Sektion: Enthalten
+  if(included.length){
+    html += `<section class="detail-section">
+      <div class="detail-section-head">
+        <span class="section-dot"></span>
+        <h3 class="detail-section-title">Enthalten in dieser Lizenz</h3>
+        <span class="detail-section-count">${included.length} Komponenten</span>
+      </div>
+      <div class="tile-grid">`;
+    included.forEach(({cat, item}) => {
+      const learnLink = item.learn
+        ? `<a class="tile-link" href="${item.learn}" target="_blank" rel="noopener">Doku →</a>`
+        : '';
+      html += `<div class="tile">
+        <div class="tile-cat">${cat}</div>
+        <div class="tile-name">${item.n}</div>
+        <div class="tile-desc">${item.desc}</div>
+        <div class="tile-foot">
+          <span class="tile-badge in">enthalten</span>
+          ${learnLink}
+        </div>
+      </div>`;
+    });
+    html += `</div></section>`;
+  }
+
+  // Sektion: Add-ons buchbar
+  if(bookableAddons.length){
+    html += `<section class="detail-section">
+      <div class="detail-section-head">
+        <span class="section-dot"></span>
+        <h3 class="detail-section-title">Als Add-on buchbar</h3>
+        <span class="detail-section-count">${bookableAddons.length} verfügbar</span>
+      </div>
+      <div class="tile-grid">`;
+    bookableAddons.forEach(({cat, item}) => {
+      const learnLink = item.learn
+        ? `<a class="tile-link" href="${item.learn}" target="_blank" rel="noopener">Doku →</a>`
+        : '';
+      html += `<div class="tile addon">
+        <div class="tile-cat">${cat}</div>
+        <div class="tile-name">${item.n}</div>
+        <div class="tile-desc">${item.desc}</div>
+        <div class="tile-foot">
+          <span class="tile-badge addon">Add-on</span>
+          ${learnLink}
+        </div>
+      </div>`;
+    });
+    html += `</div></section>`;
+  }
+
+  detailView.innerHTML = html;
+  countPill.textContent = `${plan.short} · ${included.length} enthalten · ${bookableAddons.length} Add-ons`;
+}
+
+function countEnthaltenForPlan(planKey){
+  let count=0;
+  CATS.forEach(g=>g.items.forEach(it=>{ if(it.in && it.in[planKey]) count++; }));
+  return count;
+}
+function countAddonsForPlan(planKey){
+  return ADDONS.filter(a=>{
+    let comp=null;
+    CATS.forEach(g=>g.items.forEach(it=>{ if(it.in && it.in[a.key]) comp=it; }));
+    if(!comp) return false;
+    if(comp.in[planKey]) return false;
+    if(comp.for && !comp.for.includes(planKey)) return false;
+    return true;
+  }).length;
+}
+
+function renderSearch(q){
+  // Pläne und Add-ons, deren Name/Short/Familie passt
+  const planMatches=PLANS.filter(p=>
+    `${p.name} ${p.short} ${p.fam}`.toLowerCase().includes(q)
+  );
+  // Komponenten aus allen Kategorien
+  const compResults=[];
+  CATS.forEach(group=>{
+    group.items.forEach(it=>{
+      const haystack=`${it.n} ${it.desc}`.toLowerCase();
+      if(haystack.includes(q)) compResults.push({cat:group.cat, item:it});
+    });
+  });
+
+  const rawQ=qInput.value;
+  const totalCount=planMatches.length+compResults.length;
+  let html=`
+    <div class="search-hero">
+      <div class="search-hero-meta">
+        <div class="search-hero-label">Suchergebnis</div>
+        <h2 class="search-hero-query">»${escapeAttr(rawQ)}«</h2>
+      </div>
+      <div class="search-hero-count">${totalCount} ${totalCount===1?'Treffer':'Treffer'}</div>
+    </div>
+  `;
+
+  if(!totalCount){
+    html+=`<div class="search-empty">Nichts passt zu „${escapeAttr(rawQ)}". Probier andere Stichworte wie „business premium", „e7", „defender", „intune", „copilot", „compliance".</div>`;
+    searchView.innerHTML=html;
+    countPill.textContent='0 Treffer';
+    return;
+  }
+
+  // Sektion: Lizenzen (Plan-Karten)
+  if(planMatches.length){
+    html+=`<div class="search-section-head">
+      <span class="section-dot"></span>
+      <h3 class="search-section-title">Lizenzen</h3>
+      <span class="search-section-count">${planMatches.length} ${planMatches.length===1?'Treffer':'Treffer'}</span>
+    </div>`;
+    html+='<div class="search-grid">';
+    planMatches.forEach(p=>{
+      const enthCount=countEnthaltenForPlan(p.key);
+      const addonsCount=countAddonsForPlan(p.key);
+      const famColor=FAM_COLORS[p.fam] || 'var(--accent)';
+      html+=`<div class="search-card plan-result" style="--fam-c:${famColor}">
+        <div class="search-card-cat">Lizenz · ${p.fam}</div>
+        <div class="search-card-name">${p.name}</div>
+        <div class="search-card-stats">
+          <span><b>${enthCount}</b> enthaltene Komponenten</span>
+          <span><b>${addonsCount}</b> Add-ons buchbar</span>
+        </div>
+        <div class="search-card-foot">
+          <div class="search-card-badges"><button class="search-badge${selected.includes(p.key)?' is-selected':''}" style="--c:${p.color}" data-plan-add="${p.key}" title="${escapeAttr(p.name)}${selected.includes(p.key)?' (bereits ausgewählt)':' — klicken, um zum Vergleich hinzuzufügen'}">${p.short}</button></div>
+          <button class="search-card-action" data-focus-plan="${p.key}">Im Detail anzeigen →</button>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+
+  // Sektion: Komponenten
+  if(compResults.length){
+    html+=`<div class="search-section-head">
+      <span class="section-dot"></span>
+      <h3 class="search-section-title">Komponenten</h3>
+      <span class="search-section-count">${compResults.length} ${compResults.length===1?'Treffer':'Treffer'}</span>
+    </div>`;
+    html+='<div class="search-grid">';
+    compResults.forEach(({cat, item})=>{
+      const includedKeys=Object.keys(item.in||{});
+      const plansIn=PLANS.filter(p=>includedKeys.includes(p.key));
+      const isSelfRefAddon = item.addon === true;
+
+      let badges='';
+      plansIn.forEach(p=>{
+        const sel=selected.includes(p.key);
+        badges+=`<button class="search-badge${sel?' is-selected':''}" style="--c:${p.color}" data-plan-add="${p.key}" title="${escapeAttr(p.name)}${sel?' (bereits ausgewählt)':' — klicken, um zum Vergleich hinzuzufügen'}">${p.short}</button>`;
+      });
+      if(isSelfRefAddon && plansIn.length===0){
+        badges+=`<span class="search-badge addon-only">Eigenständiges Add-on</span>`;
+      } else if(isSelfRefAddon){
+        badges+=`<span class="search-badge addon-only">+ Add-on-Lizenz</span>`;
+      }
+
+      const learn = item.learn ? `<a class="tile-link" href="${item.learn}" target="_blank" rel="noopener">Doku →</a>` : '';
+
+      html+=`<div class="search-card">
+        <div class="search-card-cat">${cat}</div>
+        <div class="search-card-name">${item.n}</div>
+        <div class="search-card-desc">${item.desc}</div>
+        <div class="search-card-foot">
+          <div class="search-card-badges">${badges || '<span class="search-no-plan">In keinem Plan enthalten</span>'}</div>
+          ${learn}
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+
+  searchView.innerHTML=html;
+  countPill.textContent=`${totalCount} ${totalCount===1?'Treffer':'Treffer'}`;
+}
+
+function applyFilter(){
+  const q=qInput.value.trim().toLowerCase();
+  let visible=0,total=0;
+  tbody.querySelectorAll('.feat-row').forEach(row=>{
+    total++;
+    const matchQ=!q||row.dataset.name.includes(q);
+    const matchDiff=mode!=='diff'||row.dataset.identical==='false';
+    const show=matchQ&&matchDiff;
+    row.classList.toggle('hide',!show);
+    if(show)visible++;
+  });
+  tbody.querySelectorAll('.cat-row').forEach(cat=>{
+    let n=cat.nextElementSibling,any=false;
+    while(n&&!n.classList.contains('cat-row')){
+      if(n.classList.contains('feat-row')&&!n.classList.contains('hide'))any=true;
+      n=n.nextElementSibling;
+    }
+    cat.classList.toggle('hide',!any);
+  });
+  countPill.textContent = mode==='diff' ? `${visible} Unterschiede`
+    : (q?`${visible} Treffer`:`${total} Komponenten`);
+}
+
+document.querySelectorAll('.seg.modes button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    mode=btn.dataset.mode;
+    document.querySelectorAll('.seg.modes button').forEach(b=>b.setAttribute('aria-pressed',b===btn));
+    rerender();
+  });
+});
+qInput.addEventListener('input', rerender);
+document.getElementById('hdrReset').addEventListener('click', resetAll);
+
+// Plan-Karte in den Such-Ergebnissen: Klick auf "Im Detail anzeigen"
+// fokussiert auf den Plan im Detail-Modus und leert die Suche
+searchView.addEventListener('click',(e)=>{
+  const focusBtn=e.target.closest('[data-focus-plan]');
+  if(focusBtn){
+    const planKey=focusBtn.dataset.focusPlan;
+    selected=[planKey];
+    qInput.value='';
+    mode='detail';
+    document.querySelectorAll('.seg.modes button').forEach(b=>{
+      b.setAttribute('aria-pressed', b.dataset.mode==='detail');
+    });
+    buildChips();
+    rerender();
+    return;
+  }
+  // Klick auf Plan-Badge in Search-Card -> Plan zur Auswahl hinzufuegen
+  const addBtn=e.target.closest('[data-plan-add]');
+  if(addBtn){
+    const k=addBtn.dataset.planAdd;
+    if(selected.includes(k)) selected=selected.filter(x=>x!==k);
+    else selected=ALLCOLS.filter(col=>selected.includes(col.key)||col.key===k).map(col=>col.key);
+    buildChips();
+    // Suche neu rendern, damit Badge-State (is-selected) aktualisiert wird
+    const q=qInput.value.trim().toLowerCase();
+    if(q) renderSearch(q);
+  }
+});
+
+buildPresets();
+buildChips();
+rerender();
+
+})();
+</script>
+<script>
+(function(){
+
+/* ========== SKU DEFINITIONS ========== */
+const SKU_GROUPS = [
+  { id: 'enterprise', name: 'Microsoft 365 Enterprise', open: true, skus: [
+    { id: 'm365_e3', name: 'Microsoft 365 E3', meta: 'Office + EMS E3 + Win11 E3 + Defender P1' },
+    { id: 'm365_e5', name: 'Microsoft 365 E5', meta: 'Vollausstattung inkl. Defender P2, Phone System, PBI Pro' },
+    { id: 'm365_apps_ent', name: 'Microsoft 365 Apps for Enterprise', meta: 'nur Office Apps + OneDrive' },
+  ]},
+  { id: 'office365', name: 'Office 365 Enterprise', open: true, skus: [
+    { id: 'o365_e1', name: 'Office 365 E1', meta: 'Web/Mobile Apps' },
+    { id: 'o365_e3', name: 'Office 365 E3', meta: 'Office + DLP' },
+    { id: 'o365_e5', name: 'Office 365 E5', meta: 'Office + Defender O365 P2 + PBI + Phone' },
+  ]},
+  { id: 'business', name: 'Microsoft 365 Business', open: true, cap: true, skus: [
+    { id: 'bus_basic', name: 'Microsoft 365 Business Basic', meta: 'Web/Mobile Apps' },
+    { id: 'bus_std', name: 'Microsoft 365 Business Standard', meta: 'Desktop Apps' },
+    { id: 'bus_prem', name: 'Microsoft 365 Business Premium', meta: 'inkl. Defender for Business + Intune' },
+    { id: 'apps_bus', name: 'Microsoft 365 Apps for Business', meta: 'nur Office Apps' },
+  ]},
+  { id: 'frontline', name: 'Frontline Worker', open: false, skus: [
+    { id: 'm365_f1', name: 'Microsoft 365 F1', meta: 'kein Office, Web only' },
+    { id: 'm365_f3', name: 'Microsoft 365 F3', meta: 'Web/Mobile Apps, 2GB Mailbox' },
+    { id: 'o365_f3', name: 'Office 365 F3', meta: 'ohne EMS / Win' },
+  ]},
+  { id: 'addons', name: 'Add-Ons', open: false, skus: [
+    { id: 'copilot', name: 'Copilot for Microsoft 365', meta: 'Voraussetzung: E3/E5/BP/BS' },
+    { id: 'teams_phone_std', name: 'Teams Phone Standard', meta: 'Phone System Add-on' },
+    { id: 'teams_phone_calling', name: 'Teams Phone with Calling Plan', meta: 'inkl. Minutenpaket' },
+    { id: 'teams_premium', name: 'Teams Premium', meta: 'Webinare, Translation, IntelliRecap' },
+    { id: 'teams_rooms_pro', name: 'Teams Rooms Pro', meta: 'Meeting Room Devices' },
+    { id: 'teams_rooms_basic', name: 'Teams Rooms Basic', meta: 'bis 25 Räume gratis' },
+    { id: 'e5_security', name: 'E5 Security', meta: 'Defender P2 + Identity + Cloud Apps + Entra P2' },
+    { id: 'e5_compliance', name: 'E5 Compliance', meta: 'Records Mgmt + IRM + Insider Risk' },
+    { id: 'e5_ediscovery', name: 'E5 eDiscovery and Audit', meta: 'Premium Audit + eDiscovery' },
+    { id: 'pbi_pro', name: 'Power BI Pro', meta: 'Standard Pro Reporting' },
+    { id: 'pbi_ppu', name: 'Power BI Premium per User', meta: 'AI + Paginated Reports' },
+    { id: 'audio_conf', name: 'Microsoft 365 Audio Conferencing', meta: 'Dial-in Bridge' },
+  ]},
+  { id: 'ems', name: 'EMS / Identity / Intune', open: false, skus: [
+    { id: 'ems_e3', name: 'Enterprise Mobility + Security E3', meta: 'Entra P1 + Intune + AIP P1' },
+    { id: 'ems_e5', name: 'Enterprise Mobility + Security E5', meta: '+ Entra P2 + Defender Identity + DCA' },
+    { id: 'entra_p1', name: 'Microsoft Entra ID P1', meta: 'Conditional Access' },
+    { id: 'entra_p2', name: 'Microsoft Entra ID P2', meta: 'Identity Protection + PIM' },
+    { id: 'intune_p1', name: 'Intune Plan 1', meta: 'Standard MDM/MAM' },
+    { id: 'intune_p2', name: 'Intune Plan 2', meta: 'Remote Help + Advanced Endpoint' },
+    { id: 'intune_suite', name: 'Intune Suite', meta: 'Plan 2 + EPM + Tunnel' },
+  ]},
+  { id: 'defender', name: 'Defender Standalone', open: false, skus: [
+    { id: 'mde_p1', name: 'Defender for Endpoint P1', meta: 'NGP + Attack Surface Reduction' },
+    { id: 'mde_p2', name: 'Defender for Endpoint P2', meta: '+ EDR + TVM' },
+    { id: 'mdo_p1', name: 'Defender for Office 365 P1', meta: 'Safe Attachments/Links' },
+    { id: 'mdo_p2', name: 'Defender for Office 365 P2', meta: '+ Threat Explorer + Attack Sim' },
+    { id: 'mdi', name: 'Defender for Identity', meta: 'On-Prem AD Threat Detection' },
+    { id: 'mdca', name: 'Defender for Cloud Apps', meta: 'CASB / Shadow IT' },
+    { id: 'mdservers_p1', name: 'Defender for Servers P1', meta: 'Server Protection Basic' },
+    { id: 'mdservers_p2', name: 'Defender for Servers P2', meta: '+ FIM + JIT + Vuln Scan' },
+  ]},
+  { id: 'powerplatform', name: 'Power Platform', open: false, skus: [
+    { id: 'pa_user', name: 'Power Apps per User', meta: 'Premium Apps unlimited' },
+    { id: 'pa_app', name: 'Power Apps per App', meta: '1 App / User' },
+    { id: 'paut_user', name: 'Power Automate per User', meta: 'Attended + Cloud Flows' },
+    { id: 'paut_flow', name: 'Power Automate per Flow', meta: '5 Flows shared' },
+    { id: 'paut_proc', name: 'Power Automate Process (RPA)', meta: 'Unattended Bot' },
+    { id: 'pp_auth', name: 'Power Pages authenticated', meta: 'B2B Portale' },
+    { id: 'pp_anon', name: 'Power Pages anonymous', meta: 'Public Sites' },
+    { id: 'copilot_studio', name: 'Copilot Studio', meta: 'Custom Copilots / Agents' },
+  ]},
+  { id: 'visio_project', name: 'Visio & Project', open: false, skus: [
+    { id: 'visio_p1', name: 'Visio Plan 1', meta: 'Web only' },
+    { id: 'visio_p2', name: 'Visio Plan 2', meta: 'Desktop + Web' },
+    { id: 'project_p1', name: 'Project Plan 1', meta: 'Project Home + Web' },
+    { id: 'project_p3', name: 'Project Plan 3', meta: 'Desktop + Project Online' },
+    { id: 'project_p5', name: 'Project Plan 5', meta: '+ Portfolio Mgmt' },
+  ]},
+];
+
+/* ========== SERVICE CATALOG ========== */
+const SERVICES = {
+  /* === DOOR OPENERS === */
+  copilot_door_opener: {
+    name: 'Copilot Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Niederschwelliger Awareness-Termin zu Microsoft 365 Copilot: was er kann, welche Voraussetzungen es braucht, welche realistischen Anwendungsfälle im Kundenkontext greifen.',
+    opener: 'Microsoft 365 Copilot ist seit 2024 allgemein verfügbar und hat im Mittelstand Reife erreicht. Bevor Lizenzen gekauft werden, lohnt ein 60-Minuten-Termin: Voraussetzungen, realistische Anwendungsfälle und konkrete erste Schritte.',
+    questions: [
+      { q: 'Welche täglichen Aufgaben kosten Ihre Mitarbeiter am meisten Zeit – und wäre ein KI-Assistent dort konkret ein Hebel?', sz: ['xs','s'] },
+      { q: 'Gibt es bei Ihnen Mitarbeiter, die ChatGPT oder ähnliche Werkzeuge privat oder sogar inoffiziell für Arbeitsthemen nutzen?', sz: ['xs','s','m'] },
+      { q: 'Wer im Haus könnte das Thema KI-Assistenz inhaltlich bewerten – die IT, ein Fachbereich oder ein externer Partner?', sz: ['s','m'] },
+      { q: 'Wie sind Berechtigungen in SharePoint und Teams historisch gewachsen – sauber strukturiert oder eher offen?', sz: ['m','l'] },
+      { q: 'Welche Fachbereiche stehen aktuell unter dem größten Druck, ihre Effizienz zu steigern?', sz: ['m','l','xl'] },
+      { q: 'Wie sind Verantwortlichkeiten zwischen IT, Datenschutz, Betriebsrat und Fachbereich beim Thema KI verteilt?', sz: ['l','xl'] },
+      { q: 'Was hält Sie konkret davon ab, KI-Assistenz produktiv einzusetzen – Datenschutz, Kosten, Adoption-Sorge oder etwas anderes?', sz: ['xs','s','m','l','xl'] },
+    ],
+  },
+  phone_door_opener: {
+    name: 'Teams Phone Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Kompakter Termin zur Telefonie-Migration über Microsoft Teams: Voraussetzungen, Migrationswege (Operator Connect oder direkte Sprachverbindung) und Kostenvergleich.',
+    opener: 'Die Telefonie-Funktion ist in den E5-Lizenzen bereits enthalten – Sie zahlen also bereits dafür, ohne sie zu nutzen. In einem Orientierungstermin zeigen wir die Migrationswege weg von der klassischen Telefonanlage und welche Bausteine der Telekom dabei wann passen.',
+    questions: [
+      { q: 'Wie lange ist Ihre aktuelle Telefonanlage schon im Einsatz und wann steht das Wartungsende an?', sz: ['xs','s'] },
+      { q: 'Wer ist heute für die Telefonie zuständig – ein interner Verantwortlicher oder ein externer Dienstleister?', sz: ['xs','s','m'] },
+      { q: 'Welcher Telefonanbieter-Vertrag läuft wann aus und ist eine Verlängerung schon angedacht?', sz: ['s','m'] },
+      { q: 'Wie viele Standorte und Rufnummern sind heute insgesamt im Einsatz?', sz: ['m','l'] },
+      { q: 'Welche Anlagen-Funktionen müssen zwingend erhalten bleiben – Warteschleifen, Sammelnummern, Notruf, Direktdurchwahlen?', sz: ['m','l','xl'] },
+      { q: 'Welche Integration mit Geschäftsanwendungen (CRM, Service Desk, Contact Center) wäre für Sie relevant?', sz: ['l','xl'] },
+      { q: 'Welche internationalen Standorte oder Tochtergesellschaften müssen bei einer Migration mitgedacht werden?', sz: ['l','xl'] },
+    ],
+  },
+  security_door_opener: {
+    name: 'Security Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Awareness-Termin zum Microsoft Security Stack: was die aktuelle Lizenzierung abdeckt, wo typische Lücken liegen und welche Erweiterungen sich rechnen.',
+    opener: 'Ihre aktuelle Lizenzierung enthält bereits die Basis-Schutzfunktionen. Typische Lücken liegen aber bei verhaltensbasierter Bedrohungserkennung, Identitäts-Schutz und Sichtbarkeit über Cloud-Anwendungen. Ein 60-Minuten-Termin zeigt strukturiert, welche Optionen passen.',
+    questions: [
+      { q: 'Wer kümmert sich aktuell um IT-Sicherheit bei Ihnen – intern, extern, oder ist das Geschäftsführungs-Thema?', sz: ['xs','s'] },
+      { q: 'Hatten Sie in den letzten 24 Monaten konkrete Vorfälle oder verdächtige Vorgänge, die Sie aufgeschreckt haben?', sz: ['xs','s','m'] },
+      { q: 'Wie hoch ist Ihre Cyber-Versicherungsprämie und welche Auflagen sind damit verknüpft?', sz: ['s','m'] },
+      { q: 'Welche regulatorischen Anforderungen treffen Sie konkret – Branchenstandards, NIS2, DORA?', sz: ['m','l'] },
+      { q: 'Wer reagiert bei einer Sicherheits-Warnmeldung – und wie schnell?', sz: ['m','l','xl'] },
+      { q: 'Wie ist Ihre Sicherheits-Organisation aufgestellt – CISO, dediziertes Team, Hybrid-Modell mit Dienstleister?', sz: ['l','xl'] },
+      { q: 'Welche Reporting-Pflichten haben Sie gegenüber Aufsichtsrat, Konzernmutter oder Behörden?', sz: ['l','xl'] },
+    ],
+  },
+  compliance_door_opener: {
+    name: 'Compliance Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zu regulatorischen Anforderungen (Datenschutz, NIS2, DORA, branchenspezifisch) und welche Microsoft 365 Compliance-Module diese abdecken.',
+    opener: 'NIS2 ist seit 2024 in Kraft, DORA seit Januar 2025. Für Ihre Größenordnung sind die Pflichten konkret. Microsoft 365 enthält die passenden Werkzeuge ab E5 Compliance – ein Orientierungstermin zeigt strukturiert, was Sie konkret trifft und wie das Mapping aussieht.',
+    questions: [
+      { q: 'Welche Branchen-Regulatorik trifft Sie heute konkret in der Praxis?', sz: ['xs','s'] },
+      { q: 'Hatten Sie schon einmal eine behördliche Anfrage, die schnellen Zugriff auf alte Mails oder Dokumente verlangt hat?', sz: ['xs','s','m'] },
+      { q: 'Wie ist Aufbewahrung von E-Mails und Dokumenten organisiert – nach Bauchgefühl oder nach Richtlinie?', sz: ['s','m'] },
+      { q: 'Wer ist intern für Datenschutz und revisionssichere Aufbewahrung verantwortlich?', sz: ['m','l'] },
+      { q: 'Gibt es kritische interne Risiken wie Datenmitnahme durch ausscheidende Mitarbeiter, die heute kein Werkzeug überwacht?', sz: ['m','l','xl'] },
+      { q: 'Wie ist Ihre Compliance-Funktion aufgestellt – Datenschutzbeauftragter, Compliance Officer, Rechtsabteilung?', sz: ['l','xl'] },
+      { q: 'Welche Drittanbieter-Lösungen für Archivierung oder Beweissicherung laufen aktuell parallel?', sz: ['l','xl'] },
+    ],
+  },
+  teams_premium_door_opener: {
+    name: 'Teams Premium Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Optionaler Termin zur Bewertung von Teams Premium gegen konkrete Anwendungsfälle – Webinare, Live-Übersetzung, intelligente Meeting-Zusammenfassung, virtuelle Sprechstunden.',
+    opener: 'Teams Premium ist kein Pflicht-Add-on, sondern lohnt sich nur bei klar definierten Anwendungsfällen. Bei Ihrer Größenordnung wäre ein kurzer Use-Case-Check sinnvoll, um zu prüfen ob auch nur einer der vier Premium-Bereiche zutrifft.',
+    questions: [
+      { q: 'Wie viele externe Webinare oder Kunden-Events veranstalten Sie pro Quartal?', sz: ['s','m'] },
+      { q: 'Werden Vorstands- oder Personalgespräche über Teams gehalten – mit hohen Vertraulichkeits-Anforderungen?', sz: ['s','m','l'] },
+      { q: 'Gibt es internationale Meetings, in denen Live-Übersetzung einen echten Mehrwert hätte?', sz: ['m','l','xl'] },
+      { q: 'Wie werden Meeting-Protokolle heute erstellt – manuell, gar nicht oder mit anderem Tool?', sz: ['s','m','l'] },
+      { q: 'Wäre virtuelle Sprechstunde ein Thema – etwa Beratungstermine, HR-Gespräche, Kunden-Onboarding?', sz: ['m','l'] },
+      { q: 'Welche externen Stakeholder haben Sie regelmäßig in Teams-Meetings – Kunden, Partner, Behörden?', sz: ['l','xl'] },
+      { q: 'Gibt es regulatorische Aufzeichnungs-Pflichten für bestimmte Meeting-Arten?', sz: ['l','xl'] },
+    ],
+  },
+  ai_door_opener: {
+    name: 'KI-Strategie Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Strategischer Termin zu allen Microsoft KI-Bausteinen (Microsoft 365 Copilot, GitHub Copilot, Copilot Studio, Custom Agents) und ihrem Zusammenspiel.',
+    opener: 'KI kommt nicht mehr nur als Microsoft 365 Copilot – GitHub Copilot, Copilot Studio, Custom Agents und Azure AI Foundry sind eigene Bausteine. Bei Ihrer Größe lohnt eine strategische Diskussion, bevor Sie mit Werkzeug-Wildwuchs enden.',
+    questions: [
+      { q: 'Welche grundsätzliche Position hat die Geschäftsleitung zum Thema KI – Treiber, Beobachter oder zurückhaltend?', sz: ['s','m'] },
+      { q: 'Welche Fachabteilungen drängen am stärksten auf KI-Unterstützung?', sz: ['s','m','l'] },
+      { q: 'Welche Microsoft KI-Bausteine sind im Visier – nur Copilot for Microsoft 365 oder auch GitHub Copilot, Copilot Studio, eigene Agenten?', sz: ['m','l'] },
+      { q: 'Wer entwickelt heute Software intern – und könnte GitHub Copilot ein Hebel sein?', sz: ['m','l','xl'] },
+      { q: 'Wie ist Ihre KI-Steuerung heute aufgesetzt – Steering Committee, KI-Council, dezentral oder gar nicht?', sz: ['l','xl'] },
+      { q: 'Welche regulatorischen Anforderungen treffen Sie speziell im KI-Kontext (EU AI Act, branchenspezifisch)?', sz: ['l','xl'] },
+      { q: 'Welche KI-Stacks laufen parallel im Konzern – OpenAI direkt, Google, Amazon, Open-Source-Modelle?', sz: ['l','xl'] },
+    ],
+  },
+  frontline_door_opener: {
+    name: 'Frontline Worker Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zu Anwendungsfällen für Mitarbeiter ohne festen Schreibtisch: Walkie-Talkie, Schichtplanung, mobile Aufgaben und Genehmigungen.',
+    opener: 'Die Frontline-Lizenzen sind das am häufigsten unterschätzte Microsoft-Investment. In einem kurzen Termin zeigen wir, welche konkreten Schmerzpunkte Ihrer Mitarbeiter ohne festen Schreibtisch sich mit den vorhandenen Lizenzen lösen lassen – ohne zusätzliche Investition.',
+    questions: [
+      { q: 'Wie kommunizieren Mitarbeiter im Lager, in der Produktion oder im Außendienst heute – per WhatsApp, Aushang, Anruf?', sz: ['xs','s'] },
+      { q: 'Welche Prozesse laufen noch papierbasiert – Schichtpläne, Übergaben, Wartungsprotokolle?', sz: ['xs','s','m'] },
+      { q: 'Wie wird die Schichtplanung heute organisiert – Excel, Whiteboard, Spezial-Tool?', sz: ['s','m'] },
+      { q: 'Welches Drittsystem für Frontline-Themen läuft heute parallel zu Microsoft – und was kostet es?', sz: ['m','l'] },
+      { q: 'Was sind die Top-3 Themen, die Frontline-Mitarbeiter regelmäßig an die IT zurückspiegeln?', sz: ['m','l','xl'] },
+      { q: 'Gibt es eine eigene Frontline-Strategie – oder werden diese Mitarbeiter bisher organisatorisch mitgezogen?', sz: ['l','xl'] },
+      { q: 'Welche Sprachen müssen für Ihre Frontline-Mitarbeiter unterstützt werden?', sz: ['l','xl'] },
+    ],
+  },
+  power_platform_door_opener: {
+    name: 'Power Platform Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zu Citizen Development und Steuerung: wo Power Platform realistisch ansetzt, wie sich Wildwuchs vermeiden lässt, wie früh Strukturen aufgebaut werden.',
+    opener: 'Power Platform wächst typischerweise organisch – mit allen Vorteilen und allen Risiken. Ein Orientierungstermin zeigt, wo der Hebel sitzt und wie sich Steuerung früh aufsetzen lässt, ohne Geschwindigkeit zu nehmen.',
+    questions: [
+      { q: 'Wofür nutzen Sie heute Excel-Dateien, die eigentlich kleine Anwendungen sein müssten?', sz: ['xs','s'] },
+      { q: 'Gibt es bei Ihnen Mitarbeiter, die schon einmal selbst kleine Werkzeuge oder Macros gebaut haben?', sz: ['xs','s','m'] },
+      { q: 'Welche IT-Anfragen aus den Fachbereichen liegen aktuell länger als sechs Monate in der Warteschlange?', sz: ['s','m'] },
+      { q: 'Wer wäre intern dafür verantwortlich, dass Citizen-Developer-Lösungen nicht zu Schatten-IT werden?', sz: ['m','l'] },
+      { q: 'Wie viele Power Apps und Automate-Flows existieren bei Ihnen heute überhaupt – mit Übersicht oder ohne?', sz: ['m','l','xl'] },
+      { q: 'Wie ist Ihre offizielle Position zu Low-Code – aktiver Treiber, Tolerierer oder kritisch?', sz: ['l','xl'] },
+      { q: 'Welche Geschäftsprozesse über mehrere Tochtergesellschaften könnten von einheitlichen Anwendungen profitieren?', sz: ['l','xl'] },
+    ],
+  },
+  migration_door_opener: {
+    name: 'Wachstums-Migration Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zur proaktiven Migration vor Erreichen der 300-Nutzer-Grenze bei den Business-Lizenzen: Wege, Zeitplan, Funktions-Mapping.',
+    opener: 'Ihre Business-Lizenzen nähern sich der 300-Nutzer-Grenze. Eine Migration in den Enterprise-Tier ist deutlich entspannter, wenn man sie vor Erreichen der Grenze durchführt – statt unter Druck darunter zu kommen. Ein Orientierungstermin zeigt die Optionen und realistische Zeitpläne.',
+    questions: [
+      { q: 'Wie sieht Ihr Wachstumsplan in den nächsten 12 bis 24 Monaten aus?', sz: ['s','m'] },
+      { q: 'Welche Funktionen aus Business Premium nutzen Sie heute aktiv – und welche eher nicht?', sz: ['s','m'] },
+      { q: 'Wann steht das nächste Renewal oder eine größere Lizenz-Beschaffung an?', sz: ['s','m','l'] },
+      { q: 'Gibt es Themen wie Übernahmen oder Fusionen, die zu schnellem Mitarbeiter-Wachstum führen könnten?', sz: ['m','l'] },
+      { q: 'Wie ist Lizenz-Verwaltung heute organisiert – wer hat Übersicht, wer kauft ein?', sz: ['m','l','xl'] },
+      { q: 'Welche internationalen Standorte oder Tochtergesellschaften müssen bei einer Migration mitbedacht werden?', sz: ['l','xl'] },
+      { q: 'Welche Vertragsmodelle vergleichen Sie aktuell – Cloud Solution Provider, Enterprise Agreement, Microsoft Customer Agreement?', sz: ['l','xl'] },
+    ],
+  },
+  identity_door_opener: {
+    name: 'Identity Protection Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zu modernem Identity-Schutz: Just-in-Time-Berechtigungen, automatische Erkennung kompromittierter Konten, risikobasierter Zugriff – was über Conditional Access hinausgeht.',
+    opener: 'Mit Ihrer aktuellen Identity-Lizenzierung haben Sie die Basis. Funktionen wie zeitlich begrenzte Admin-Rechte, automatische Erkennung kompromittierter Konten und risikobasierte Zugriffsregeln liegen aber auf der nächsten Stufe – und sind genau die Punkte, die nach Vorfällen oder bei Audits kritisch werden.',
+    questions: [
+      { q: 'Wer hat heute Admin-Rechte auf Microsoft 365 – und wie wird das überprüft?', sz: ['s','m'] },
+      { q: 'Wie hoch ist Ihre Mehrfaktor-Authentifizierungs-Abdeckung – inklusive Service-Konten und Admins?', sz: ['s','m','l'] },
+      { q: 'Wann fand der letzte strukturierte Identity-Audit statt?', sz: ['m','l'] },
+      { q: 'Wie viele externe Gast-Konten haben Sie und wann wurden die zuletzt überprüft?', sz: ['m','l','xl'] },
+      { q: 'Wie werden privilegierte Zugriffe heute zeitlich begrenzt – oder ist das dauerhaft offen?', sz: ['l','xl'] },
+      { q: 'Welche Identity-Vorfälle hatten Sie in den letzten 24 Monaten – kompromittierte Konten, erfolgreiche Phishing-Angriffe?', sz: ['l','xl'] },
+      { q: 'Wie ist die Trennung zwischen produktiven und Test-Umgebungen identity-seitig aufgesetzt?', sz: ['l','xl'] },
+    ],
+  },
+  endpoint_security_door_opener: {
+    name: 'Endpoint Security Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zur Endpoint-Schutz-Strategie: warum Server-Schutz allein nicht reicht und wie sich Server- und Endpoint-Schutz konsolidieren lassen.',
+    opener: 'Sie schützen heute Server mit Microsoft Defender, aber Ihre Endgeräte (Notebooks, PCs) liegen außerhalb des Microsoft-Stacks. Das ist eine häufige Konstellation nach Cloud-Migrationen – aber die meisten Angriffe starten am Endgerät des Nutzers, nicht am Server.',
+    questions: [
+      { q: 'Welche Sicherheitslösung schützt heute Ihre PCs und Notebooks – Microsoft, ein Drittanbieter, ein Mix?', sz: ['xs','s'] },
+      { q: 'Wann läuft der aktuelle Vertrag für Ihre Antivirus- oder Endpoint-Lösung aus?', sz: ['xs','s','m'] },
+      { q: 'Wer reagiert bei verdächtigen Aktivitäten an einem Endgerät – und wie schnell?', sz: ['s','m'] },
+      { q: 'Wie viele Endgeräte sind heute insgesamt im Einsatz – inklusive mobiler Geräte und Heimarbeit?', sz: ['m','l'] },
+      { q: 'Wie ist die Aufgabenteilung zwischen interner IT und externem Dienstleister im Sicherheits-Bereich?', sz: ['m','l','xl'] },
+      { q: 'Welche Ausfälle oder Vorfälle hatten Sie in den letzten 12 Monaten an Endgeräten?', sz: ['l','xl'] },
+      { q: 'Welche Datenflüsse zwischen Endgerät und Cloud werden heute kontrolliert oder gefiltert?', sz: ['l','xl'] },
+    ],
+  },
+  backup_door_opener: {
+    name: 'Microsoft 365 Backup Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zur Datensicherung in Microsoft 365: Microsoft 365 Backup als nativer Service, Drittanbieter-Lösungen, Wiederherstellungs-Strategie.',
+    opener: 'Microsoft 365 Backup ist seit 2024 als nativer Service verfügbar und schließt die Lücke zwischen Microsoft-Wiederherstellungs-Funktionen und einer echten Backup-Strategie. Bei Ihrer Größe ist ein strukturierter Wiederherstellungs-Plan kein Nice-to-have mehr.',
+    questions: [
+      { q: 'Wenn morgen ein Mitarbeiter versehentlich Daten löscht – wie weit zurück könnten Sie wiederherstellen?', sz: ['xs','s'] },
+      { q: 'Haben Sie eine Backup-Lösung für Mails, OneDrive und SharePoint – oder verlassen Sie sich auf Microsoft-Standard?', sz: ['xs','s','m'] },
+      { q: 'Welche Wiederherstellungszeiten sind für Sie geschäftskritisch – Stunden, Tage oder eine Woche?', sz: ['s','m'] },
+      { q: 'Hatten Sie in den letzten 24 Monaten konkrete Datenverlust-Vorfälle?', sz: ['m','l'] },
+      { q: 'Wie ist Ihre Strategie für den Ernstfall – etwa nach einem Ransomware-Angriff?', sz: ['m','l','xl'] },
+      { q: 'Welche Vertrags-Zusagen gegenüber Kunden, Aufsichtsrat oder Behörden haben Sie zur Datenverfügbarkeit?', sz: ['l','xl'] },
+      { q: 'Wer trägt formal das Risiko für Datenverluste – IT, Geschäftsführung, externe Stelle?', sz: ['l','xl'] },
+    ],
+  },
+  pbi_door_opener: {
+    name: 'Power BI Orientierungsgespräch',
+    tier: 'door_opener',
+    tagline: 'Termin zur Reporting- und Business-Intelligence-Strategie: wo Power BI Pro, Premium per User oder Premium Capacity sich rechnen, wie es sich gegen Drittanbieter abgrenzt.',
+    opener: 'Bei Ihrer Größe ist Reporting praktisch immer ein Thema – meist gelöst über Excel-Export oder Drittsysteme. Power BI ist nicht zwingend, aber ein Orientierungstermin zeigt, wo es sich rechnet und wo Premium-Funktionen lohnen.',
+    questions: [
+      { q: 'Wie wird Ihr monatliches Geschäftsreporting heute erstellt – manuell in Excel, mit einem Tool, vom Dienstleister?', sz: ['xs','s'] },
+      { q: 'Wer baut Auswertungen für Geschäftsleitung oder Vertrieb – ein Power-User oder die IT?', sz: ['xs','s','m'] },
+      { q: 'Welche Business-Intelligence-Werkzeuge laufen heute parallel – und was kosten die jährlich?', sz: ['s','m'] },
+      { q: 'Welche Reporting-Anforderungen aus den Fachbereichen sind heute nicht abgedeckt?', sz: ['m','l'] },
+      { q: 'Gibt es ein Data Warehouse, einen Data Lake oder eine ähnliche Datenplattform?', sz: ['m','l','xl'] },
+      { q: 'Wer ist für Daten- und Reporting-Strategie verantwortlich – Chief Data Officer, BI-Team, dezentral?', sz: ['l','xl'] },
+      { q: 'Welche Reporting-Anforderungen gegenüber Aufsichtsbehörden, Konzernmutter oder Investoren bestehen?', sz: ['l','xl'] },
+    ],
+  },
+
+  /* === WORKSHOPS / ASSESSMENTS === */
+  license_opt: {
+    name: 'License Optimization Workshop',
+    tier: 'workshop',
+    tagline: 'Aufdeckung von Doppellizenzierung und Bundle-Chancen, Konsolidierung der Lizenz-Stufen, Gesamtkosten-Modell und Renewal-Roadmap.',
+    opener: 'In Ihrer Lizenzstruktur sehen wir Anzeichen für Optimierungspotenzial. Erfahrungsgemäß finden wir bei vergleichbaren Kunden 8 bis 15 Prozent Einsparung allein durch Konsolidierung – ohne Funktionsverlust.',
+    questions: [
+      { q: 'Wer kauft bei Ihnen heute Lizenzen ein – Einzelperson, Einkauf, externer Partner?', sz: ['xs','s'] },
+      { q: 'Wann wurde Ihr Lizenzbestand zuletzt strukturiert auf Doppelungen geprüft?', sz: ['xs','s','m'] },
+      { q: 'Gibt es eine konsolidierte Sicht auf alle Microsoft-Komponenten oder ist das verteilt?', sz: ['s','m'] },
+      { q: 'Welche Renewal-Termine kommen in den nächsten 12 Monaten auf Sie zu?', sz: ['m','l'] },
+      { q: 'Welche Microsoft-Komponenten zahlen Sie aktuell, von denen Sie wissen, dass sie wenig genutzt werden?', sz: ['m','l','xl'] },
+      { q: 'Wie ist Ihr Vertragsmodell aufgebaut – Cloud Solution Provider, Enterprise Agreement oder Microsoft Customer Agreement?', sz: ['l','xl'] },
+      { q: 'Wer ist intern Stakeholder für eine Lizenz-Optimierung – CFO, CIO, Einkauf?', sz: ['l','xl'] },
+    ],
+  },
+  tenant_hardening: {
+    name: 'Tenant Hardening Workshop',
+    tier: 'workshop',
+    tagline: 'Härtung von Identity, Conditional Access, Defender-Grundeinstellungen und Datenschutz-Settings nach Microsoft Security Baselines.',
+    opener: 'Bei Ihrer Tenant-Größe ist eine strukturierte Härtung ein üblicher Schritt. Microsoft Security Baselines decken über 80 Prozent der häufigsten Angriffsvektoren ab, sind aber selten vollständig konfiguriert.',
+    questions: [
+      { q: 'Wie ist Ihr Microsoft-Tenant historisch entstanden – frisch aufgesetzt, gewachsen, durch Übernahme erweitert?', sz: ['s','m'] },
+      { q: 'Wann wurden Ihre Sicherheits-Grundeinstellungen zuletzt überprüft?', sz: ['s','m'] },
+      { q: 'Wie schneidet Ihr Microsoft Secure Score aktuell ab – bekannt oder unbekannt?', sz: ['m','l'] },
+      { q: 'Sind Ihre Conditional-Access-Regeln einheitlich über alle Standorte und Tochtergesellschaften gerollt?', sz: ['m','l','xl'] },
+      { q: 'Gab es in den letzten 12 Monaten Vorfälle, die ein strukturiertes Hardening notwendig gemacht haben?', sz: ['l','xl'] },
+      { q: 'Welche Standards oder Frameworks sollen bei der Härtung eingehalten werden – BSI Grundschutz, ISO 27001, NIST?', sz: ['l','xl'] },
+      { q: 'Welche Standorte oder Bereiche haben heute besonders sensible Daten und müssen priorisiert werden?', sz: ['m','l','xl'] },
+    ],
+  },
+  security_assessment: {
+    name: 'Microsoft Security Assessment',
+    tier: 'workshop',
+    tagline: 'Strukturierte Bewertung über Identity, Endpoints, Mail, Daten und Cloud-Anwendungen mit Secure Score, Risiko-Matrix und priorisierter Roadmap.',
+    opener: 'Ein strukturiertes Security Assessment liefert eine objektive Sicht auf Ihren Reifegrad – mit Secure-Score-Analyse, Risiko-Matrix und priorisierter Roadmap. Das Ergebnis lässt sich direkt in Vorstandsberichten verwenden.',
+    questions: [
+      { q: 'Welche Treiber stehen hinter dem Wunsch nach einem Assessment – Vorfall, Audit, Versicherung, Eigeninitiative?', sz: ['s','m'] },
+      { q: 'Wann fand die letzte externe Sicherheits-Überprüfung oder ein Penetrationstest statt?', sz: ['s','m','l'] },
+      { q: 'Welche internen Stakeholder müssen die Ergebnisse sehen – Geschäftsleitung, Aufsichtsrat, Datenschutzbeauftragter?', sz: ['m','l'] },
+      { q: 'Welche Konkurrenz-Werkzeuge zu Microsoft Security laufen aktuell parallel?', sz: ['m','l','xl'] },
+      { q: 'Wie ist die Beziehung zur Cyber-Versicherung – Auflagen, Selbstbehalte, geplante Erneuerung?', sz: ['l','xl'] },
+      { q: 'In welche regulatorischen Reportings (NIS2, DORA, branchenspezifisch) muss das Ergebnis einfließen?', sz: ['l','xl'] },
+      { q: 'Welche Tochtergesellschaften oder internationalen Standorte sind im Untersuchungs-Umfang – oder bewusst ausgeklammert?', sz: ['l','xl'] },
+    ],
+  },
+  defender_opt: {
+    name: 'Defender Optimization Workshop',
+    tier: 'workshop',
+    tagline: 'Tuning der Microsoft Defender-Suite (Endpoint, Office 365, Identity, Cloud Apps): Richtlinien, Alert-Tuning, Untersuchungs-Playbooks, eigene Erkennungen.',
+    opener: 'Defender-Lizenzen sind nur die halbe Miete. Erfahrungsgemäß sind 30 bis 50 Prozent der enthaltenen Funktionen nicht aktiviert oder schlecht eingestellt. Ein Optimization-Workshop bringt diese Funktionen in Wirkung.',
+    questions: [
+      { q: 'Welche Defender-Module sind heute überhaupt aktiv geschaltet?', sz: ['s','m'] },
+      { q: 'Wer bearbeitet bei Ihnen Sicherheits-Warnmeldungen – internes Team oder Dienstleister?', sz: ['s','m','l'] },
+      { q: 'Wie hoch ist die aktuelle Quote falscher Alarme – belastend oder akzeptabel?', sz: ['m','l'] },
+      { q: 'Sind eigene Erkennungs-Regeln und Untersuchungs-Playbooks im Einsatz oder lediglich die Microsoft-Standards?', sz: ['m','l','xl'] },
+      { q: 'Wie ist die Anbindung an ein Security Operations Center geregelt – intern, extern, hybrid?', sz: ['l','xl'] },
+      { q: 'Welche Schnittstellen zu anderen Sicherheits-Werkzeugen (Sentinel, SIEM-Lösungen) bestehen heute?', sz: ['l','xl'] },
+      { q: 'Welches Reifegrad-Modell wenden Sie auf Ihre Sicherheits-Funktionen an?', sz: ['m','l','xl'] },
+    ],
+  },
+  compliance_assess: {
+    name: 'Compliance Readiness Assessment',
+    tier: 'workshop',
+    tagline: 'Mapping regulatorischer Anforderungen auf Microsoft 365 Records Management, Insider Risk und Premium eDiscovery.',
+    opener: 'Microsoft 365 enthält ab E5 Compliance umfassende Werkzeuge für revisionssichere Aufbewahrung, Insider Risk und erweiterte Suche – aber selten vollständig konfiguriert. Ein Assessment zeigt strukturiert die Lücke und priorisiert die Maßnahmen.',
+    questions: [
+      { q: 'Wie ist Aufbewahrung und Löschung von E-Mails heute geregelt – formell, informell oder gar nicht?', sz: ['s','m'] },
+      { q: 'Welche internen Regulatorik-Anforderungen werden bisher manuell oder gar nicht abgedeckt?', sz: ['s','m','l'] },
+      { q: 'Hatten Sie in den letzten 24 Monaten externe Audits oder behördliche Anfragen?', sz: ['m','l'] },
+      { q: 'Wie sind Verantwortlichkeiten für Compliance-Themen heute aufgeteilt?', sz: ['m','l','xl'] },
+      { q: 'Welche Insider-Themen sind heute überhaupt sichtbar – Datenmitnahme, böswilliges Verhalten, Compliance-Verstöße?', sz: ['l','xl'] },
+      { q: 'Wie schnell könnten Sie heute auf eine eDiscovery-Anfrage reagieren – Stunden, Tage, Wochen?', sz: ['l','xl'] },
+      { q: 'Welche internationalen Datenschutz-Themen müssen bei Tochtergesellschaften berücksichtigt werden?', sz: ['l','xl'] },
+    ],
+  },
+  endpoint_assess: {
+    name: 'Endpoint Management Assessment',
+    tier: 'workshop',
+    tagline: 'Bewertung des Intune-Setups: Compliance-Richtlinien, automatisches Geräte-Provisioning, App-Schutz, erweiterte Admin-Funktionen.',
+    opener: 'Intune kann mehr, als die meisten Tenants nutzen. Compliance-Richtlinien, App-Schutz, automatisches Provisioning und Admin-Funktionen sind oft lizenziert, aber nicht aktiviert. Ein Assessment macht den Hebel sichtbar.',
+    questions: [
+      { q: 'Wie sieht Ihre heutige Endgeräte-Strategie aus – on-premises, hybrid oder rein cloudbasiert?', sz: ['s','m'] },
+      { q: 'Welche Drittlösungen für Geräte-Management sind heute im Einsatz – und was kosten die?', sz: ['s','m','l'] },
+      { q: 'Wie hoch ist die Compliance-Quote bei Ihren Endgeräten – wissen Sie das überhaupt?', sz: ['m','l'] },
+      { q: 'Sind automatisches Geräte-Provisioning und Admin-Funktionen bereits geplant oder ausgerollt?', sz: ['m','l','xl'] },
+      { q: 'Welche Endgeräte-Plattformen müssen heute unterstützt werden – Windows, Mac, mobile, virtuelle Desktops?', sz: ['l','xl'] },
+      { q: 'Wie ist der Lebenszyklus Ihrer Endgeräte aufgebaut – Beschaffung, Rollout, Wartung, Rückgabe?', sz: ['l','xl'] },
+      { q: 'Wie wird das Onboarding neuer Mitarbeiter heute technisch abgewickelt?', sz: ['m','l','xl'] },
+    ],
+  },
+  identity_review: {
+    name: 'Identity & Access Review',
+    tier: 'workshop',
+    tagline: 'Analyse der Mehrfaktor-Authentifizierung, der Zugriffsregeln, des privilegierten Zugriffs, des Gast-Zugangs und der erlaubten Authentifizierungs-Methoden.',
+    opener: 'Identity ist heute der Sicherheits-Perimeter. Bei vielen Mittelstandsunternehmen ist Microsoft Entra zwar im Einsatz, aber Lücken in Mehrfaktor-Abdeckung, alte Authentifizierungs-Methoden oder ungenutzte Funktionen für privilegierten Zugriff sind häufige Findings. Ein kompakter Review bringt drei bis fünf konkrete Quick Wins.',
+    questions: [
+      { q: 'Sind alle Konten heute mit Mehrfaktor-Authentifizierung geschützt – auch Service-Konten?', sz: ['s','m'] },
+      { q: 'Wie viele Personen haben aktuell Admin-Rechte auf Microsoft 365 – und wie wird das überprüft?', sz: ['s','m','l'] },
+      { q: 'Wann fand der letzte strukturierte Identity-Audit statt?', sz: ['m','l'] },
+      { q: 'Wie sind Gast-Konten organisiert – kontrolliert oder eher Wildwuchs?', sz: ['m','l','xl'] },
+      { q: 'Welche alten Authentifizierungs-Protokolle sind heute noch zugelassen?', sz: ['l','xl'] },
+      { q: 'Welche Identity-Vorfälle hatten Sie in den letzten 24 Monaten – Phishing, übernommene Konten, Privilegien-Eskalation?', sz: ['l','xl'] },
+      { q: 'Wie ist das Zusammenspiel zwischen lokalem Active Directory und Microsoft Entra heute aufgesetzt?', sz: ['l','xl'] },
+    ],
+  },
+  power_coe: {
+    name: 'Power Platform Center of Excellence Setup',
+    tier: 'workshop',
+    tagline: 'Aufbau eines Center of Excellence: Steuerung, Umgebungs-Strategie, Citizen-Developer-Programm, Admin-Konsole, Monitoring.',
+    opener: 'Mit produktiv genutzten Power Apps und Flows lohnt sich ein strukturiertes Center of Excellence. Es schafft Steuerung, Compliance und ein Citizen-Developer-Programm – ohne die organische Geschwindigkeit zu nehmen.',
+    questions: [
+      { q: 'Wie viele Power Apps und Flows existieren bei Ihnen aktuell – mit Übersicht oder ohne?', sz: ['m','l'] },
+      { q: 'Wer fühlt sich heute für die Steuerung der Citizen-Developer-Lösungen verantwortlich?', sz: ['m','l'] },
+      { q: 'Welche kritischen Geschäftsprozesse hängen heute schon an Power Platform?', sz: ['m','l','xl'] },
+      { q: 'Wie sind Test-, Entwicklungs- und Produktiv-Umgebungen heute getrennt?', sz: ['l','xl'] },
+      { q: 'Welche Ausbildung oder Community gibt es heute für Citizen-Developer?', sz: ['l','xl'] },
+      { q: 'Wer trägt Risiko und Compliance-Verantwortung für die Lösungen?', sz: ['l','xl'] },
+      { q: 'Wie ist die Schnittstelle zwischen IT und Fachbereichen geregelt – Co-Innovation oder Konkurrenz?', sz: ['m','l','xl'] },
+    ],
+  },
+  frontline_workshop: {
+    name: 'Frontline Worker Workshop',
+    tier: 'workshop',
+    tagline: 'Konkretes Anwendungsfall-Mapping und Implementierungs-Roadmap für Frontline-Lizenzen: Walkie-Talkie, Schichtplanung, Aufgaben, Genehmigungen.',
+    opener: 'Mit dem vorhandenen Frontline-Bestand lassen sich konkrete Schmerzpunkte in vier bis sechs Wochen lösen. Der Workshop liefert Anwendungsfall-Mapping, technisches Setup und Adoption-Plan.',
+    questions: [
+      { q: 'Welche Pilotgruppe wäre für einen ersten Frontline-Anwendungsfall geeignet?', sz: ['s','m'] },
+      { q: 'Welche der vier Hauptfunktionen – Walkie-Talkie, Schichtplanung, Aufgaben, Genehmigungen – hat den größten Hebel?', sz: ['s','m','l'] },
+      { q: 'Wer aus dem Fachbereich wäre interner Champion für einen Pilot?', sz: ['m','l'] },
+      { q: 'Welche Drittlösungen müssten ersetzt oder integriert werden?', sz: ['m','l','xl'] },
+      { q: 'Welche Sprachen müssen für die Frontline-Mitarbeiter unterstützt werden?', sz: ['l','xl'] },
+      { q: 'Wie gewinnt man Frontline-Mitarbeiter für ein neues Werkzeug – und wer übernimmt das Change Management?', sz: ['l','xl'] },
+      { q: 'Welche regulatorischen Themen (Arbeitsschutz, Mitbestimmung) müssen bei Schicht- und Aufgaben-Themen beachtet werden?', sz: ['l','xl'] },
+    ],
+  },
+
+  /* === IMPLEMENTATION / PROJECT === */
+  copilot_pilot: {
+    name: 'Copilot Pilot & Adoption',
+    tier: 'project',
+    tagline: 'Begleiteter Pilot mit 10 bis 50 Lizenzen: Anwendungsfall-Mapping, Schulung, Erfolgsmessung, Skalierungs-Roadmap.',
+    opener: 'Sie haben Copilot bereits im Einsatz – jetzt entscheidet Adoption über die Wirtschaftlichkeit. Ein strukturierter Pilot mit zusätzlichen Lizenzen liefert nach sechs Wochen messbare Ergebnisse und eine klare Skalierungs-Empfehlung.',
+    questions: [
+      { q: 'Wie wird Copilot heute eingesetzt – frei explorativ oder strukturiert?', sz: ['s','m'] },
+      { q: 'Welche Anwendergruppen haben bisher den größten Erfolg – und welche kämpfen?', sz: ['s','m','l'] },
+      { q: 'Welche Kennzahl würde belegen, dass Copilot bei Ihnen Mehrwert schafft?', sz: ['m','l'] },
+      { q: 'Wer könnte intern als Copilot-Champion fungieren und Adoption treiben?', sz: ['m','l','xl'] },
+      { q: 'Wie messen Sie heute Produktivität – und wie würden Sie Copilot-Erfolg messen?', sz: ['l','xl'] },
+      { q: 'Wie sind Sie organisatorisch auf eine Skalierung über 1.000 Mitarbeiter aufgestellt – Change Management, Schulung, Support?', sz: ['l','xl'] },
+      { q: 'Welche Lessons Learned aus früheren Microsoft-Rollouts (Teams-Einführung) lassen sich übertragen?', sz: ['m','l','xl'] },
+    ],
+  },
+  phone_migration: {
+    name: 'Teams Phone Migration',
+    tier: 'project',
+    tagline: 'Ablösung der klassischen Telefonanlage über Operator Connect oder direkte Sprachverbindung inkl. Rufnummern-Portierung und Ausfall-Konzept.',
+    opener: 'Mit Microsoft Teams Phone migrieren Sie nicht nur die Telefonie, sondern konsolidieren Zusammenarbeit und Telefonie auf einer Plattform. Operator Connect (über die Telekom) und direkte Sprachverbindung sind die zwei sauberen Wege.',
+    questions: [
+      { q: 'Welcher Migrationsweg passt strategisch besser – Operator Connect mit der Telekom oder direkte Sprachverbindung über eigenen Anschluss?', sz: ['s','m'] },
+      { q: 'Welche Anlagen-Funktionen müssen 1:1 erhalten bleiben – Warteschleifen, Sammelnummern, Sondernummern?', sz: ['s','m','l'] },
+      { q: 'Wie viele Standorte und Rufnummern werden konkret migriert?', sz: ['m','l'] },
+      { q: 'Welche regulatorischen Anforderungen an Notruf, Aufzeichnungspflicht oder Ausfallsicherheit müssen erfüllt werden?', sz: ['m','l','xl'] },
+      { q: 'Wie wird die Migration etappenweise geplant – nach Standort, Abteilung oder Funktion?', sz: ['l','xl'] },
+      { q: 'Welche Integrationen mit Geschäftsanwendungen (CRM, Service Desk, Contact Center) müssen mitgemacht werden?', sz: ['l','xl'] },
+      { q: 'Welche Tochtergesellschaften oder internationalen Standorte sind in welcher Reihenfolge im Untersuchungs-Umfang?', sz: ['l','xl'] },
+    ],
+  },
+};
+
+/* ========== STATE ========== */
+const STORAGE_KEY = 'm365_lhc_state_v4';
+let state = {};
+let openServices = {};
+let resetArmed = false;
+let resetTimer = null;
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) state = JSON.parse(saved);
+  } catch (e) {}
+  SKU_GROUPS.forEach(g => g.skus.forEach(s => {
+    if (typeof state[s.id] !== 'number') state[s.id] = 0;
+  }));
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+function totalSeats() {
+  let sum = 0;
+  ['m365_e3','m365_e5','o365_e1','o365_e3','o365_e5','m365_apps_ent','bus_basic','bus_std','bus_prem','apps_bus','m365_f1','m365_f3','o365_f3'].forEach(k => sum += state[k] || 0);
+  return sum;
+}
+
+function knowledgeWorkerSeats() {
+  return (state.m365_e3||0) + (state.m365_e5||0) + (state.o365_e1||0) + (state.o365_e3||0) + (state.o365_e5||0) + (state.bus_basic||0) + (state.bus_std||0) + (state.bus_prem||0);
+}
+
+// Benennt, welche E3-Lizenzen tatsaechlich eingegeben wurden (gegen Verwechslung M365 E3 / Office 365 E3)
+function e3Present() {
+  const names = [];
+  if ((state.m365_e3 || 0) > 0) names.push('Microsoft 365 E3');
+  if ((state.o365_e3 || 0) > 0) names.push('Office 365 E3');
+  return names.length ? names.join(' + ') : 'E3';
+}
+
+/* ========== SIZE TIER ========== */
+const SIZE_TIERS = {
+  xs: { label: 'XS', name: 'Kleinst-Unternehmen', range: 'bis 49 Mitarbeiter' },
+  s:  { label: 'S',  name: 'Klein-Mittelstand',    range: '50 – 249 Mitarbeiter' },
+  m:  { label: 'M',  name: 'Mittelstand',          range: '250 – 999 Mitarbeiter' },
+  l:  { label: 'L',  name: 'Gehobener Mittelstand',range: '1.000 – 4.999 Mitarbeiter' },
+  xl: { label: 'XL', name: 'Großunternehmen',      range: 'ab 5.000 Mitarbeiter' },
+};
+
+function getSizeTier(seats) {
+  if (seats < 50) return 'xs';
+  if (seats < 250) return 's';
+  if (seats < 1000) return 'm';
+  if (seats < 5000) return 'l';
+  return 'xl';
+}
+
+function totalBusiness() {
+  return (state.bus_basic||0) + (state.bus_std||0) + (state.bus_prem||0) + (state.apps_bus||0);
+}
+
+/* ========== ICONS ========== */
+const ICONS = {
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  briefcase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  chevron: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+  arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+};
+
+const TIER_LABELS = {
+  door_opener: 'Orientierungsgespräch',
+  workshop: 'Workshop',
+  project: 'Projekt',
+};
+
+/* ========== RULES ========== */
+const RULES = [
+  /* === CRITICAL: Lizenzfehler === */
+  { id: 'bus_basic_overcap', sev: 'critical', tag: 'Lizenzverstoß', services: ['license_opt', 'migration_door_opener'],
+    test: s => s.bus_basic > 300,
+    title: () => `Business Basic überschreitet 300-User-Limit (${state.bus_basic})`,
+    text: 'Microsoft 365 Business-Pläne sind pro Tenant auf 300 Seats begrenzt. Aktuelle Konstellation ist nicht regelkonform.',
+    anchor: '<strong>Migration auf Office 365 E1 oder M365 E3</strong> – über 300 User gehört das in den Enterprise-Tier.',
+  },
+  { id: 'bus_std_overcap', sev: 'critical', tag: 'Lizenzverstoß', services: ['license_opt', 'migration_door_opener'],
+    test: s => s.bus_std > 300,
+    title: () => `Business Standard überschreitet 300-User-Limit (${state.bus_std})`,
+    text: 'Business Standard ist auf 300 Seats begrenzt. Nicht regelkonform.',
+    anchor: '<strong>Step-up auf M365 E3</strong> – vergleichbarer Funktionsumfang plus Defender for Endpoint P1 und EMS E3.',
+  },
+  { id: 'bus_prem_overcap', sev: 'critical', tag: 'Lizenzverstoß', services: ['license_opt', 'migration_door_opener', 'security_door_opener'],
+    test: s => s.bus_prem > 300,
+    title: () => `Business Premium überschreitet 300-User-Limit (${state.bus_prem})`,
+    text: 'Klassischer Fall: Kunde wächst über die Business-Schwelle hinaus. Compliance-Risiken bei Audits.',
+    anchor: '<strong>Migration auf M365 E3 + E5 Security Add-on</strong> ergibt häufig den günstigsten Pfad, um BP-Sicherheitsfeatures zu erhalten.',
+  },
+  { id: 'apps_bus_overcap', sev: 'critical', tag: 'Lizenzverstoß', services: ['license_opt'],
+    test: s => s.apps_bus > 300,
+    title: () => `Apps for Business überschreitet 300-User-Limit (${state.apps_bus})`,
+    text: 'Apps for Business ist auf 300 Lizenzen begrenzt.',
+    anchor: '<strong>Wechsel auf Apps for Enterprise</strong> ohne User-Cap.',
+  },
+  { id: 'm365e3_redundant_emse3', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => s.m365_e3 > 0 && s.ems_e3 > 0,
+    title: 'EMS E3 zusätzlich zu Microsoft 365 E3',
+    text: 'M365 E3 enthält EMS E3 bereits vollständig (Entra P1, Intune, AIP P1). Standalone EMS E3 daneben ist Doppellizenzierung.',
+    anchor: '<strong>EMS E3 Standalone reduzieren</strong> – Budget kann in E5 Security oder Copilot reinvestiert werden.',
+  },
+  { id: 'm365e5_redundant_emse5', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => s.m365_e5 > 0 && s.ems_e5 > 0,
+    title: 'EMS E5 zusätzlich zu Microsoft 365 E5',
+    text: 'M365 E5 enthält EMS E5 vollständig (Entra P2, Intune, AIP P2, Defender for Identity, Defender for Cloud Apps).',
+    anchor: '<strong>Standalone EMS E5 entfernen</strong> – komplett redundant.',
+  },
+  { id: 'm365e5_redundant_e5sec', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => s.m365_e5 > 0 && s.e5_security > 0,
+    title: 'E5 Security Add-on zusätzlich zu M365 E5',
+    text: 'M365 E5 beinhaltet bereits alle E5-Security-Komponenten (Defender P2, Defender for Identity, DCA, Entra P2).',
+    anchor: '<strong>E5 Security Add-on streichen.</strong>',
+  },
+  { id: 'e5_redundant_pbi', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => (s.m365_e5 > 0 || s.o365_e5 > 0) && s.pbi_pro > 0,
+    title: 'Power BI Pro neben M365/O365 E5',
+    text: 'M365 E5 und O365 E5 enthalten Power BI Pro bereits.',
+    anchor: '<strong>Power BI Pro Standalones prüfen</strong> – nur PPU oder Premium Capacity sind sinnvolle Add-ons.',
+  },
+  { id: 'e5_redundant_phone', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => (s.o365_e5 > 0 || s.m365_e5 > 0) && s.teams_phone_std > 0,
+    title: 'Teams Phone Standard zusätzlich zu E5',
+    text: 'Phone System ist Bestandteil von M365 E5 und O365 E5. Add-on-Lizenzen sind redundant.',
+    anchor: '<strong>Calling Plan oder Operator Connect</strong> sind dagegen weiterhin notwendig für ausgehende PSTN-Telefonie.',
+  },
+  { id: 'bp_with_mde_p1', sev: 'critical', tag: 'Doppellizenzierung', services: ['license_opt'],
+    test: s => s.bus_prem > 0 && s.mde_p1 > 0,
+    title: 'Defender for Endpoint P1 zusätzlich zu Business Premium',
+    text: 'Business Premium beinhaltet Defender for Business, der MDE P1 weitgehend abdeckt. Standalone-Lizenzen sind nicht sinnvoll.',
+    anchor: '<strong>Bei EDR-Bedarf:</strong> Step-up auf MDE P2 oder M365 BP → M365 E3 + E5 Security.',
+  },
+
+  /* === WARNING / CHANCE - immer mit Door-Opener === */
+  { id: 'bp_approaching_cap', sev: 'warning', tag: 'Wachstums-Risiko', services: ['migration_door_opener', 'license_opt'],
+    test: s => s.bus_prem >= 250 && s.bus_prem <= 300,
+    title: () => `Business Premium nähert sich 300-User-Cap (${state.bus_prem})`,
+    text: 'Bei aktuellem Bestand wird der Cap bei moderatem Wachstum bald erreicht. Eine Migration vor dem Cap ist deutlich entspannter als unter Druck.',
+    anchor: '<strong>Proaktive Migrationsplanung</strong> jetzt anstoßen, bevor User-Wachstum zur Compliance-Falle wird.',
+  },
+  { id: 'bp_no_security_addon', sev: 'warning', tag: 'Security Gap', services: ['security_door_opener', 'license_opt'],
+    test: s => s.bus_prem >= 50 && s.e5_security === 0 && s.mde_p2 === 0 && s.mdo_p2 === 0,
+    title: 'Business Premium ohne Security-Add-ons',
+    text: 'Business Premium enthält Defender for Business (≈ MDE P1) und MDO P1. Für EDR, Threat Explorer, Defender for Identity oder Cloud Apps fehlen die Bausteine.',
+    anchor: '<strong>Security-Stack bewerten:</strong> Reicht BP, oder lohnt der Wechsel auf M365 E3 + E5 Security wegen EDR und Identity Protection?',
+  },
+  { id: 'e3_no_p2_security', sev: 'warning', tag: 'Security Gap', services: ['security_door_opener', 'security_assessment', 'defender_opt'],
+    test: s => s.m365_e3 >= 50 && s.e5_security === 0 && s.m365_e5 === 0 && s.mde_p2 === 0,
+    title: () => `Microsoft 365 E3 (${state.m365_e3}) ohne Defender P2 / E5 Security`,
+    text: 'Microsoft 365 E3 enthält nur Defender for Endpoint P1 (kein EDR, keine Threat & Vulnerability Management). Office 365 E3 enthält gar keinen Defender for Endpoint. Bei Cyber-Vorfällen die erste Frage des Auditors.',
+    anchor: '<strong>Drei Optionen:</strong> (1) E5 Security Add-on, (2) Step-up auf M365 E5, (3) Standalone Defender P2.',
+  },
+  { id: 'e3_no_pbi', sev: 'warning', tag: 'BI Gap', services: ['pbi_door_opener', 'license_opt'],
+    test: s => (s.m365_e3 + s.o365_e3) >= 100 && s.pbi_pro === 0 && s.pbi_ppu === 0 && s.m365_e5 === 0 && s.o365_e5 === 0,
+    title: () => `Großer ${e3Present()}-Bestand ohne Power BI`,
+    text: 'Bei dieser Größe ist Reporting praktisch garantiert ein Thema – meist über Excel-Export oder Drittsysteme gelöst.',
+    anchor: '<strong>Power BI Pro Add-on</strong>, oder bei AI-Reporting-Bedarf <strong>Power BI Premium per User</strong>.',
+  },
+  { id: 'bp_without_copilot', sev: 'warning', tag: 'AI Adoption', services: ['copilot_door_opener'],
+    test: s => s.bus_prem >= 30 && s.copilot === 0,
+    title: 'Business Premium ohne Copilot',
+    text: 'Voraussetzungen für Copilot for M365 sind erfüllt (BP qualifiziert). Häufig liegt das Ausbleiben nur an fehlender Aufklärung im Mittelstand.',
+    anchor: '<strong>Copilot-Awareness-Termin</strong> als niederschwelliger Einstieg – Voraussetzungen, Use Cases, realistische erste Schritte.',
+  },
+  { id: 'e3_without_copilot', sev: 'warning', tag: 'AI Adoption', services: ['copilot_door_opener'],
+    test: s => (s.m365_e3 + s.m365_e5 + s.o365_e3 + s.o365_e5) >= 50 && s.copilot === 0,
+    title: 'Knowledge-Worker-Estate ohne Copilot',
+    text: 'Lizenztechnisch qualifiziert, AI-Adoption noch nicht eingeleitet. Marktdruck wächst – Wettbewerber bauen Copilot-Routinen aktuell auf.',
+    anchor: '<strong>Copilot Orientierungsgespräch</strong> als Türöffner: Voraussetzungen, Use Cases, realistische erste Schritte.',
+  },
+  { id: 'copilot_low_adoption', sev: 'warning', tag: 'Adoption', services: ['copilot_pilot'],
+    test: s => s.copilot > 0 && s.copilot < knowledgeWorkerSeats() * 0.05 && knowledgeWorkerSeats() >= 100,
+    title: () => `Copilot-Pilotbestand (${state.copilot}) – Skalierung steht aus`,
+    text: 'Erste Copilot-Lizenzen sind im Einsatz. Erfahrungsgemäß entscheidet sich nach 6–8 Wochen, ob ausgerollt wird – oder ob die Lizenzen versanden.',
+    anchor: '<strong>Pilot-Strukturierung & Skalierungs-Roadmap</strong> – aus dem freien Pilot wird ein produktiver Rollout.',
+  },
+  { id: 'multi_defender_standalone', sev: 'warning', tag: 'Bundle-Chance', services: ['license_opt', 'defender_opt'],
+    test: s => [s.mde_p2, s.mdo_p2, s.mdi, s.mdca].filter(v => v > 0).length >= 3,
+    title: 'Mehrere Defender-Module standalone',
+    text: 'Mit drei oder mehr Defender-Komponenten parallel ist das E5-Security-Add-on rechnerisch fast immer günstiger – plus Entra P2 als Beigabe.',
+    anchor: '<strong>TCO-Vergleich aufstellen:</strong> Summe der Standalones vs. E5 Security pro User.',
+  },
+  { id: 'server_def_no_endpoint', sev: 'warning', tag: 'Security-Lücke', services: ['endpoint_security_door_opener'],
+    test: s => (s.mdservers_p1 + s.mdservers_p2) >= 10 && (s.mde_p1 + s.mde_p2) === 0 && s.m365_e3 === 0 && s.m365_e5 === 0 && s.bus_prem === 0,
+    title: 'Server unter Defender, Endpoints aber nicht',
+    text: 'Server sind geschützt, aber Endpoints liegen außerhalb des Microsoft-Defender-Stacks. Lateral Movement startet typischerweise beim User-Endpoint.',
+    anchor: '<strong>Endpoint-Defender-Story konsolidieren:</strong> Entweder MDE P2 standalone oder über M365 E3/BP integriert.',
+  },
+  { id: 'no_intune_p2', sev: 'warning', tag: 'Endpoint Mgmt', services: ['endpoint_assess'],
+    test: s => (s.m365_e3 + s.bus_prem) >= 100 && s.intune_p2 === 0 && s.intune_suite === 0 && s.m365_e5 === 0,
+    title: 'Endpoint-Estate ohne Intune Plan 2 / Suite',
+    text: 'Bei 100+ Devices kommen Themen wie Remote Help, Endpoint Privilege Management, Tunnel oder Advanced Endpoint Analytics zwangsläufig auf.',
+    anchor: '<strong>Intune Suite</strong> als gebündeltes Add-on – meist günstiger als die Einzelkomponenten.',
+  },
+  { id: 'mixed_business_enterprise', sev: 'warning', tag: 'Tenant Hygiene', services: ['license_opt', 'tenant_hardening'],
+    test: s => (s.bus_basic + s.bus_std + s.bus_prem) >= 20 && (s.m365_e3 + s.m365_e5 + s.o365_e3 + s.o365_e5) >= 20,
+    title: 'Business- und Enterprise-SKUs parallel im Tenant',
+    text: 'Mischbestand führt zu komplexer Permissions-Logik, erhöhtem Support-Aufwand und Verwirrung beim Onboarding.',
+    anchor: '<strong>Konsolidierung evaluieren:</strong> Einheitliches Tier reduziert Komplexität, in der Regel Richtung Enterprise.',
+  },
+  { id: 'f1_no_f3', sev: 'warning', tag: 'Frontline-Setup', services: ['frontline_door_opener', 'frontline_workshop'],
+    test: s => s.m365_f1 >= 50 && s.m365_f3 < s.m365_f1 / 2,
+    title: 'Hoher F1-Anteil ohne F3-Mischung',
+    text: 'F1 ist sehr restriktiv (kein Office, kein Mailbox-Zugriff). In den meisten Frontline-Szenarien ist F3 deutlich praxistauglicher.',
+    anchor: '<strong>F1 vs. F3 Use-Case-Mapping:</strong> Wer regelmäßig E-Mails schreibt oder Dokumente bearbeitet, gehört auf F3.',
+  },
+  { id: 'e3_no_compliance', sev: 'warning', tag: 'Compliance Gap', services: ['compliance_door_opener', 'compliance_assess'],
+    test: s => (s.m365_e3 + s.o365_e3) >= 200 && s.e5_compliance === 0 && s.e5_ediscovery === 0 && s.m365_e5 === 0,
+    title: () => `Großer ${e3Present()}-Bestand ohne Compliance-Add-on`,
+    text: 'Records Management, Insider Risk, Communication Compliance und Premium eDiscovery sind in E3 nicht enthalten. In regulierten Branchen kritisch.',
+    anchor: '<strong>E5 Compliance</strong> oder mindestens <strong>E5 eDiscovery & Audit</strong> – Banking, Healthcare, Pharma, Public Sector.',
+  },
+  { id: 'rooms_no_phone', sev: 'warning', tag: 'Meeting Rooms', services: ['phone_door_opener'],
+    test: s => (s.teams_rooms_pro + s.teams_rooms_basic) >= 5 && s.teams_phone_calling === 0 && s.o365_e5 === 0 && s.m365_e5 === 0,
+    title: 'Teams Rooms ohne PSTN-Anbindung',
+    text: 'Räume können nur Teams-Meetings hosten – Wählscheiben-Funktion fehlt ohne Calling Plan / Direct Routing / Operator Connect.',
+    anchor: '<strong>PSTN-Strategie ansprechen:</strong> Calling Plan vs. Operator Connect vs. Direct Routing.',
+  },
+  { id: 'pa_app_high', sev: 'warning', tag: 'PowerApps Optimierung', services: ['power_platform_door_opener', 'power_coe'],
+    test: s => s.pa_app >= 100 && s.pa_user === 0,
+    title: 'Hoher Power Apps "per App"-Bestand',
+    text: 'Bei vielen Apps pro User wird per-User-Lizenz schnell günstiger. Faustregel: ab ~3 Apps pro User lohnt der Wechsel.',
+    anchor: '<strong>App-Nutzung pro User analysieren</strong> und ggf. auf Power Apps Premium per User umstellen.',
+  },
+
+  /* === INFO / GESPRÄCHSANKER === */
+  { id: 'e5_no_phone_calling', sev: 'info', tag: 'Telefonie', services: ['phone_door_opener'],
+    test: s => (s.m365_e5 + s.o365_e5) >= 50 && s.teams_phone_calling === 0,
+    title: 'E5 vorhanden – Telefonie-Migration ungenutzt',
+    text: 'Phone System ist enthalten, aber ohne Calling Plan oder Direct Routing keine echte Telefonie. Klassischer „Schatz im Bestand"-Hebel.',
+    anchor: '<strong>Teams Phone Orientierungsgespräch</strong> – Voraussetzungen sind bereits da, nur die PSTN-Anbindung fehlt.',
+  },
+  { id: 'e5_assessment', sev: 'info', tag: 'E5-Hebel', services: ['copilot_door_opener', 'phone_door_opener', 'tenant_hardening'],
+    test: s => (s.m365_e5 + s.o365_e5) >= 100 && s.copilot === 0,
+    title: () => `E5-Bestand (${state.m365_e5 + state.o365_e5}): AI- und Telefonie-Hebel offen`,
+    text: 'E5-Kunden zahlen für Funktionen, die typischerweise nur zu 30–50 % genutzt werden. Phone System und Copilot-Voraussetzungen liegen bereit.',
+    anchor: '<strong>Drei Türöffner:</strong> Copilot, Teams Phone, Tenant Hardening – alle ohne zusätzliche Lizenzkosten startbar.',
+  },
+  { id: 'e5_security_estate', sev: 'info', tag: 'Security Maturity', services: ['defender_opt', 'security_assessment'],
+    test: s => (s.m365_e5 + s.e5_security) >= 200,
+    title: 'Großer E5-Security-Bestand',
+    text: 'Bei 200+ Defender-fähigen Lizenzen lohnt ein strukturierter Reifegrad-Check. Häufig liegen Defender for Identity oder Defender for Cloud Apps brach.',
+    anchor: '<strong>Defender Optimization Workshop</strong> oder Sentinel-Anbindung als Folgegespräch.',
+  },
+  { id: 'frontline_heavy', sev: 'info', tag: 'Frontline', services: ['frontline_door_opener', 'frontline_workshop'],
+    test: s => (s.m365_f1 + s.m365_f3 + s.o365_f3) > 0 && (s.m365_f1 + s.m365_f3 + s.o365_f3) > knowledgeWorkerSeats(),
+    title: 'Frontline-dominanter Tenant',
+    text: 'Frontline-Anteil überwiegt. Häufig ungenutzt: Walkie-Talkie in Teams, Shifts, Tasks by Planner, Viva Connections, Approvals.',
+    anchor: '<strong>Frontline Worker Use Cases</strong> – Schichtplanung, Wissenstransfer, mobile Genehmigungen.',
+  },
+  { id: 'large_e3_no_e5', sev: 'info', tag: 'Step-Up', services: ['license_opt', 'security_door_opener'],
+    test: s => (s.m365_e3 + s.o365_e3) >= 200 && (s.m365_e5 + s.o365_e5) === 0,
+    title: () => `Großer ${e3Present()}-Bestand ohne E5-Anteil`,
+    text: 'Bei dieser Größe lohnt ein gezielter E5-Step-up für ausgewählte Personae (IT, Finance, Geschäftsleitung) als Pilot.',
+    anchor: '<strong>Persona-basiertes Step-up-Modell</strong> statt All-or-Nothing-Migration.',
+  },
+  { id: 'power_platform_signal', sev: 'info', tag: 'Citizen Dev', services: ['power_platform_door_opener', 'power_coe'],
+    test: s => (s.pa_user + s.pa_app + s.paut_user + s.paut_flow + s.copilot_studio) >= 10,
+    title: 'Power Platform im Einsatz',
+    text: 'Lizenzen vorhanden bedeutet aber selten strukturierte Adoption. Häufig nur 1–2 Power-User, der Rest schläft.',
+    anchor: '<strong>Center of Excellence / Fusion Team Programm</strong> ansprechen, plus Copilot Studio für Custom Agents.',
+  },
+  { id: 'mid_size', sev: 'info', tag: 'Tenant Insights', services: ['tenant_hardening', 'license_opt', 'backup_door_opener'],
+    test: s => totalSeats() >= 250 && totalSeats() < 1000,
+    title: () => `Mittelstand-Profil (${totalSeats()} User)`,
+    text: 'Klassische DACH-Mittelstandsgröße. Hier sind Tenant-Konsolidierung, Copilot-Pilot, Phone-Migration und Sicherheits-Upgrade meist gleichzeitig dran.',
+    anchor: '<strong>Strategischer Quartalsplan</strong> statt Einzelmaßnahmen – Bundle-Effekte mitnehmen.',
+  },
+  { id: 'large_enterprise', sev: 'info', tag: 'Enterprise Track', services: ['tenant_hardening', 'ai_door_opener', 'license_opt', 'backup_door_opener'],
+    test: s => totalSeats() >= 1000,
+    title: () => `Enterprise-Größe (${totalSeats()} User)`,
+    text: 'Für diese Größenordnung sind Enterprise Agreements (EA) oder MCA-E mit Volume-Discounts relevant. Multi-Tenant- und M&A-Themen wahrscheinlich.',
+    anchor: '<strong>Vertragsmodell prüfen:</strong> CSP vs. EA vs. MCA-E – plus FastTrack-Berechtigung.',
+  },
+  { id: 'teams_premium_check', sev: 'info', tag: 'Optional', services: ['teams_premium_door_opener'],
+    test: s => knowledgeWorkerSeats() >= 250 && s.teams_premium === 0,
+    title: 'Teams Premium optional sinnvoll',
+    text: 'Bei Ihrer Größe lohnt eine Use-Case-Bewertung von Teams Premium – nicht für alle, aber für Webinare, internationale Meetings oder vertrauliche Gespräche.',
+    anchor: '<strong>Optional</strong> – nur wenn konkrete Use Cases zutreffen. Sonst beobachten.',
+  },
+  { id: 'identity_signal', sev: 'info', tag: 'Identity', services: ['identity_door_opener', 'identity_review'],
+    test: s => (s.entra_p1 + s.entra_p2 + s.ems_e3 + s.ems_e5) >= 100 || (s.m365_e3 + s.m365_e5 + s.bus_prem) >= 200,
+    title: 'Großer Identity-Estate – Review lohnt',
+    text: 'MFA-Coverage, Conditional-Access-Sauberkeit, Privileged Identity Management und Guest-Access sind in den meisten Tenants nicht voll ausgereizt.',
+    anchor: '<strong>Identity & Access Review</strong> als kompakter Einstieg – meist 3–5 konkrete Quick Wins.',
+  },
+  { id: 'ems_e3_no_p2', sev: 'info', tag: 'Identity Protection', services: ['identity_door_opener'],
+    test: s => (s.ems_e3 + s.entra_p1) >= 100 && s.ems_e5 === 0 && s.entra_p2 === 0 && s.m365_e5 === 0 && s.e5_security === 0,
+    title: 'EMS E3 / Entra P1 ohne Identity Protection',
+    text: 'Großer Identity-Estate mit P1-Funktionen, aber ohne Identity Protection P2 (PIM, Risk-Based CA, Risk Detection). P2-Funktionen sind die typischen Audit-Findings.',
+    anchor: '<strong>Step-up-Pfad:</strong> EMS E5, M365 E5 oder E5 Security Add-on – alle drei bringen P2.',
+  },
+  { id: 'apps_only_signal', sev: 'info', tag: 'Workspace-Frage', services: ['license_opt'],
+    test: s => (s.m365_apps_ent + s.apps_bus) >= 50 && (s.m365_e3 + s.m365_e5 + s.o365_e1 + s.o365_e3 + s.o365_e5 + s.bus_basic + s.bus_std + s.bus_prem) < (s.m365_apps_ent + s.apps_bus) / 2,
+    title: 'Hoher Apps-only-Anteil',
+    text: 'Apps-only-Lizenzen ohne entsprechenden Suite-Anteil weisen oft auf parallele Mail/Collab-Lösungen hin (Google Workspace, Lotus etc.) – oder auf historische Konstellationen.',
+    anchor: '<strong>Workspace-Frage stellen:</strong> Wo sitzt heute Mail und Collaboration? Gibt es Konsolidierungs-Potenzial?',
+  },
+
+  /* === SUCCESS === */
+  { id: 'looks_clean', sev: 'ok', tag: 'Status', services: ['tenant_hardening'],
+    test: s => totalSeats() > 0 && countActionable() === 0,
+    title: 'Lizenzkonstellation wirkt sauber',
+    text: 'Aus den eingegebenen Mengen ergeben sich keine kritischen Überschneidungen oder offensichtlichen Lücken.',
+    anchor: '<strong>Trotzdem nachfragen:</strong> Adoption-Stand, kommende Projekte, Renewal-Termine. „Sauber" heißt nicht „ausgereizt".',
+  },
+];
+
+function countActionable() {
+  return RULES.filter(r => r.id !== 'looks_clean' && (r.sev === 'critical' || r.sev === 'warning'))
+              .filter(r => { try { return r.test(state) } catch (e) { return false } }).length;
+}
+
+/* ========== RENDER: INPUTS ========== */
+function renderInputs() {
+  const root = document.getElementById('input-list');
+  root.innerHTML = SKU_GROUPS.map(g => `
+    <div class="cat" data-id="${g.id}" data-open="${g.open}" data-has-data="false">
+      <div class="cat-head">
+        <div class="cat-name">${g.name}</div>
+        <div class="cat-right">
+          <span class="cat-count" data-cat-count></span>
+          ${ICONS.chevron}
+        </div>
+      </div>
+      <div class="cat-body">
+        ${g.skus.map(sku => `
+          <div class="sku" data-sku="${sku.id}">
+            <div>
+              <div class="sku-name">${sku.name}</div>
+              <div class="sku-meta">${g.cap ? '<span class="sku-cap">CAP 300</span>' : ''}${sku.meta}</div>
+            </div>
+            <div class="qty">
+              <input class="qty-input" type="number" min="0" max="99999" inputmode="numeric" placeholder="0" title="Menge eintippen" value="${state[sku.id] ? state[sku.id] : ''}" data-sku="${sku.id}" />
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  root.querySelectorAll('.cat-head').forEach(h => {
+    h.addEventListener('click', () => {
+      const c = h.closest('.cat');
+      c.dataset.open = c.dataset.open === 'true' ? 'false' : 'true';
+    });
+  });
+
+  root.querySelectorAll('.qty-btn').forEach(b => {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      const sku = b.dataset.sku;
+      const delta = b.dataset.act === 'inc' ? 1 : -1;
+      const next = Math.max(0, (state[sku] || 0) + delta);
+      state[sku] = next;
+      const inp = root.querySelector(`input[data-sku="${sku}"]`);
+      if (inp) inp.value = next;
+      onChange();
+    });
+  });
+
+  root.querySelectorAll('.qty-input').forEach(inp => {
+    inp.addEventListener('click', e => e.stopPropagation());
+    inp.addEventListener('input', () => {
+      const v = Math.max(0, parseInt(inp.value) || 0);
+      state[inp.dataset.sku] = v;
+      onChange();
+    });
+  });
+}
+
+function refreshInputStyles() {
+  document.querySelectorAll('.sku').forEach(row => {
+    const sku = row.dataset.sku;
+    row.dataset.active = (state[sku] || 0) > 0 ? 'true' : 'false';
+  });
+  SKU_GROUPS.forEach(g => {
+    const total = g.skus.reduce((acc, s) => acc + (state[s.id] || 0), 0);
+    const cat = document.querySelector(`.cat[data-id="${g.id}"]`);
+    if (cat) {
+      cat.dataset.hasData = total > 0 ? 'true' : 'false';
+      const el = cat.querySelector('[data-cat-count]');
+      if (el) el.textContent = total > 0 ? total.toLocaleString('de-DE') : '';
+    }
+  });
+}
+
+/* ========== RENDER: FINDINGS ========== */
+function getActiveFindings() {
+  return RULES.map(r => {
+    try {
+      if (!r.test(state)) return null;
+      return {
+        id: r.id,
+        sev: r.sev,
+        tag: r.tag,
+        services: r.services || [],
+        title: typeof r.title === 'function' ? r.title() : r.title,
+        text: typeof r.text === 'function' ? r.text() : r.text,
+        anchor: typeof r.anchor === 'function' ? r.anchor() : r.anchor,
+      };
+    } catch (e) { return null; }
+  }).filter(Boolean);
+}
+
+function labelFor(sev) {
+  return { critical: 'Kritisch', warning: 'Chance', info: 'Gesprächsanker', ok: 'Status' }[sev];
+}
+
+function renderFindings() {
+  const root = document.getElementById('findings');
+  const findings = getActiveFindings();
+  const total = totalSeats();
+
+  document.getElementById('findings-count').textContent =
+    total === 0 ? 'Keine Daten' : `${findings.length} Finding${findings.length !== 1 ? 's' : ''}`;
+  document.getElementById('stat-findings').textContent = findings.length;
+  document.getElementById('stat-total').textContent = total.toLocaleString('de-DE');
+  const tierKey = total > 0 ? getSizeTier(total) : null;
+  const tierEl = document.getElementById('stat-tier-label');
+  if (tierKey) {
+    tierEl.innerHTML = `${SIZE_TIERS[tierKey].label} <span class="hero-stat-tier-name">${SIZE_TIERS[tierKey].name}</span>`;
+  } else {
+    tierEl.textContent = '–';
+  }
+
+  if (total === 0) {
+    root.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">${ICONS.search}</div>
+        <h3>Lizenzbestand eingeben</h3>
+        <p>Mengen für die SKUs des Kunden links eintragen. Empfehlungen erscheinen automatisch.</p>
+      </div>`;
+    document.getElementById('services-wrap').innerHTML = '';
+    document.getElementById('stat-services').textContent = '0';
+    return;
+  }
+
+  const order = { critical: 0, warning: 1, info: 2, ok: 3 };
+  findings.sort((a, b) => order[a.sev] - order[b.sev]);
+
+  root.innerHTML = findings.map((f, i) => {
+    const primaryService = f.services[0] ? SERVICES[f.services[0]] : null;
+    return `
+      <article class="finding" data-sev="${f.sev}" style="animation-delay: ${i * 30}ms">
+        <div class="finding-meta">
+          <span class="sev-badge">${labelFor(f.sev)}</span>
+          <span class="finding-tag">${f.tag}</span>
+        </div>
+        <div class="finding-title">${f.title}</div>
+        <div class="finding-text">${f.text}</div>
+        <div class="finding-anchor">${f.anchor}</div>
+        ${primaryService ? `<span class="finding-service-tag">${ICONS.briefcase}<span>Service: <strong>${primaryService.name}</strong></span></span>` : ''}
+      </article>
+    `;
+  }).join('');
+
+  renderServiceRoadmap(findings);
+}
+
+function pickQuestionsForSize(pool, currentSize, usedTexts, maxCount) {
+  if (!Array.isArray(pool) || pool.length === 0) return [];
+  // Normalisiere: alte String-Fragen kompatibel halten
+  const normalized = pool.map(q => typeof q === 'string' ? { q: q, sz: ['xs','s','m','l','xl'] } : q);
+  // Erste Wahl: Fragen die exakt zur aktuellen Größe passen
+  const matching = normalized.filter(q => Array.isArray(q.sz) && q.sz.includes(currentSize) && !usedTexts.has(q.q));
+  const selected = matching.slice(0, maxCount);
+  // Falls weniger als maxCount: Fülle aus benachbarten Größen
+  if (selected.length < maxCount) {
+    const fillers = normalized.filter(q => !selected.includes(q) && !usedTexts.has(q.q));
+    for (const f of fillers) {
+      if (selected.length >= maxCount) break;
+      selected.push(f);
+    }
+  }
+  selected.forEach(q => usedTexts.add(q.q));
+  return selected;
+}
+
+function renderServiceRoadmap(findings) {
+  const counts = {};
+  const triggerMap = {};
+  findings.forEach(f => {
+    f.services.forEach(sid => {
+      counts[sid] = (counts[sid] || 0) + 1;
+      if (!triggerMap[sid]) triggerMap[sid] = [];
+      triggerMap[sid].push(f);
+    });
+  });
+
+  const TIER_PRIO = { door_opener: 0, workshop: 1, project: 2 };
+  const sorted = Object.keys(counts).sort((a, b) => {
+    const cd = counts[b] - counts[a];
+    if (cd !== 0) return cd;
+    const ta = SERVICES[a] ? TIER_PRIO[SERVICES[a].tier] : 99;
+    const tb = SERVICES[b] ? TIER_PRIO[SERVICES[b].tier] : 99;
+    return ta - tb;
+  }).slice(0, 6);
+
+  document.getElementById('stat-services').textContent = sorted.length;
+
+  if (sorted.length === 0) {
+    document.getElementById('services-wrap').innerHTML = '';
+    return;
+  }
+
+  // Anti-Repetition: globaler Tracker über alle Services
+  const usedQuestionTexts = new Set();
+  const currentSize = getSizeTier(totalSeats());
+  const questionsPerService = {};
+  sorted.forEach(sid => {
+    const s = SERVICES[sid];
+    if (s && s.questions) {
+      questionsPerService[sid] = pickQuestionsForSize(s.questions, currentSize, usedQuestionTexts, 4);
+    } else {
+      questionsPerService[sid] = [];
+    }
+  });
+
+  const html = `
+    <div class="services-section">
+      <div class="services-head">
+        <h3>Empfohlene Maßnahmen</h3>
+        <span class="lbl">Top ${sorted.length} · klick für Details</span>
+      </div>
+      <div class="services-list">
+        ${sorted.map((sid, i) => {
+          const s = SERVICES[sid];
+          if (!s) return '';
+          const triggers = triggerMap[sid];
+          const isOpen = openServices[sid] === true;
+          const qs = questionsPerService[sid] || [];
+          return `
+            <div class="service" data-sid="${sid}" data-open="${isOpen}">
+              <div class="service-head" data-svc-toggle="${sid}">
+                <div class="service-rank">${String(i + 1).padStart(2, '0')}</div>
+                <div class="service-info">
+                  <div class="service-name-row">
+                    <div class="service-name">${s.name}</div>
+                    <span class="tier-pill" data-tier="${s.tier}">${TIER_LABELS[s.tier]}</span>
+                  </div>
+                  <div class="service-tagline">${s.tagline}</div>
+                </div>
+                <div class="service-trigger-pill">${counts[sid]} Trigger</div>
+                <div class="service-toggle">${ICONS.arrowDown}</div>
+              </div>
+              <div class="service-detail">
+                <div class="detail-block">
+                  <div class="detail-label">Was diese Empfehlung triggert</div>
+                  <div class="trigger-list">
+                    ${triggers.map(t => `
+                      <div class="trigger-item" data-sev="${t.sev}">
+                        <span class="trigger-sev-dot"></span>
+                        <span>${t.title}</span>
+                        <span class="trigger-tag">${t.tag}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+                <div class="detail-block">
+                  <div class="detail-label">Gesprächseinstieg</div>
+                  <div class="opener-block">
+                    <div class="opener-block-content">${s.opener}</div>
+                  </div>
+                </div>
+                <div class="detail-block">
+                  <div class="detail-label">Discovery Questions · ${SIZE_TIERS[currentSize].name}</div>
+                  <div class="questions-list">
+                    ${qs.map((q, qi) => `
+                      <div class="question-item">
+                        <span class="question-num">${qi + 1}</span>
+                        <span>${q.q}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('services-wrap').innerHTML = html;
+
+  document.querySelectorAll('[data-svc-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const sid = el.dataset.svcToggle;
+      openServices[sid] = !openServices[sid];
+      const card = document.querySelector(`.service[data-sid="${sid}"]`);
+      if (card) card.dataset.open = openServices[sid] ? 'true' : 'false';
+    });
+  });
+}
+
+/* ========== ORCHESTRATION ========== */
+function onChange() {
+  refreshInputStyles();
+  renderFindings();
+  saveState();
+}
+
+/* ========== EXPORT ========== */
+function buildNotes() {
+  const findings = getActiveFindings();
+  const order = { critical: 0, warning: 1, info: 2, ok: 3 };
+  findings.sort((a, b) => order[a.sev] - order[b.sev]);
+
+  const skuLines = [];
+  SKU_GROUPS.forEach(g => {
+    const used = g.skus.filter(s => (state[s.id] || 0) > 0);
+    if (used.length === 0) return;
+    skuLines.push(`\n[${g.name}]`);
+    used.forEach(s => skuLines.push(`  ${s.name}: ${state[s.id]}`));
+  });
+
+  const counts = {};
+  const triggerMap = {};
+  findings.forEach(f => f.services.forEach(sid => {
+    counts[sid] = (counts[sid] || 0) + 1;
+    if (!triggerMap[sid]) triggerMap[sid] = [];
+    triggerMap[sid].push(f);
+  }));
+  const TIER_PRIO = { door_opener: 0, workshop: 1, project: 2 };
+  const services = Object.keys(counts).sort((a, b) => {
+    const cd = counts[b] - counts[a];
+    if (cd !== 0) return cd;
+    return (SERVICES[a] ? TIER_PRIO[SERVICES[a].tier] : 99) - (SERVICES[b] ? TIER_PRIO[SERVICES[b].tier] : 99);
+  }).slice(0, 6);
+
+  let txt = `MICROSOFT SALES SUPPORTER · Account Insights\n`;
+  txt += `Datum: ${new Date().toLocaleDateString('de-DE')}\n`;
+  txt += `Total Seats: ${totalSeats()}\n`;
+  const currentSize = getSizeTier(totalSeats());
+  txt += `Größentier: ${SIZE_TIERS[currentSize].label} – ${SIZE_TIERS[currentSize].name} (${SIZE_TIERS[currentSize].range})\n`;
+  txt += `\n========== LIZENZBESTAND ==========${skuLines.join('\n')}\n`;
+  txt += `\n========== FINDINGS (${findings.length}) ==========\n`;
+  findings.forEach(f => {
+    const anchor = f.anchor.replace(/<[^>]+>/g, '');
+    txt += `\n[${f.sev.toUpperCase()}] ${f.tag}\n${f.title}\n${f.text}\nAnker: ${anchor}\n`;
+  });
+  if (services.length) {
+    txt += `\n========== EMPFOHLENE MASSNAHMEN ==========\n`;
+    const usedQuestionTexts = new Set();
+    services.forEach((sid, i) => {
+      const s = SERVICES[sid];
+      if (!s) return;
+      txt += `\n${i+1}. ${s.name} [${TIER_LABELS[s.tier].toUpperCase()}] (${counts[sid]}× Trigger)\n   ${s.tagline}\n`;
+      txt += `\n   Trigger:\n`;
+      triggerMap[sid].forEach(t => txt += `     - [${t.sev}] ${t.title}\n`);
+      txt += `\n   Gesprächseinstieg:\n   "${s.opener}"\n`;
+      const qs = pickQuestionsForSize(s.questions, currentSize, usedQuestionTexts, 4);
+      txt += `\n   Discovery Questions (${SIZE_TIERS[currentSize].name}):\n`;
+      qs.forEach((q, qi) => txt += `     ${qi+1}. ${q.q}\n`);
+    });
+  }
+  return txt;
+}
+
+/* ========== TOAST ========== */
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.dataset.show = 'true';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.dataset.show = 'false'; }, 2000);
+}
+
+/* ========== RESET (two-step pattern, no browser confirm) ========== */
+function disarmReset() {
+  resetArmed = false;
+  const btn = document.getElementById('btn-reset');
+  btn.classList.remove('btn-armed');
+  document.getElementById('btn-reset-label').textContent = 'Reset';
+  if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+}
+
+function armReset() {
+  resetArmed = true;
+  const btn = document.getElementById('btn-reset');
+  btn.classList.add('btn-armed');
+  document.getElementById('btn-reset-label').textContent = 'Wirklich?';
+  resetTimer = setTimeout(disarmReset, 2500);
+}
+
+function doReset() {
+  Object.keys(state).forEach(k => state[k] = 0);
+  openServices = {};
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  renderInputs();
+  onChange();
+  disarmReset();
+  toast('Eingaben zurückgesetzt');
+}
+
+/* ========== INIT ========== */
+loadState();
+renderInputs();
+onChange();
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  if (totalSeats() === 0) { toast('Keine Daten zum Exportieren'); return; }
+  const text = buildNotes();
+  // Primär: echter Datei-Download (zuverlässig, auch ohne Zwischenablage-Rechte)
+  try {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'M365-SalesSupporter-Notizen_' + d + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Notizen als Textdatei exportiert');
+  } catch (e) {
+    toast('Export fehlgeschlagen');
+  }
+  // Zusätzlich (falls erlaubt) auch in die Zwischenablage – stört nicht, wenn es scheitert
+  try { if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!resetArmed) {
+    if (totalSeats() === 0) { toast('Bereits leer'); return; }
+    armReset();
+  } else {
+    doReset();
+  }
+});
+
+})();
+</script>
+<script>
+/* =====================================================================
+   M365 EXPLORER — Router: Tool-Auswahl, Swoosh-Übergang, PDF-Export
+   Läuft als letztes Script. Hängt Steuer-Buttons per JS in die beiden
+   Tools ein, damit deren Original-Markup unangetastet bleibt.
+   ===================================================================== */
+(function(){
+  const landing  = document.getElementById('landing');
+  const explorer = document.getElementById('view-explorer');
+  const sales    = document.getElementById('view-sales');
+  if(!landing || !explorer || !sales) return;
+
+  document.body.classList.add('lp-lock');
+
+  const HOME_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"/><path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/></svg>';
+  const PDF_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>';
+
+  /* ---- Steuer-Buttons in den Lizenz-Explorer einhängen ---- */
+  const expActions = explorer.querySelector('.header-actions');
+  if(expActions){
+    expActions.insertAdjacentHTML('afterbegin',
+      '<button class="hdr-btn ghost x-home" id="exploreHome" title="Zurück zur Startseite" style="margin-right:8px">'+HOME_ICON+'<span style="margin-left:6px">Startseite</span></button>'+
+      '<button class="hdr-btn ghost x-print" id="explorerPrint" title="Lizenzvergleich als PDF herunterladen" style="margin-right:8px">'+PDF_ICON+'<span style="margin-left:6px">Als PDF exportieren</span></button>');
+    explorer.querySelector('#exploreHome').addEventListener('click', goHome);
+    explorer.querySelector('#explorerPrint').addEventListener('click', doExportPdf);
+  }
+
+  /* ---- „Startseite" in den Sales Supporter einhängen ---- */
+  const salesActions = sales.querySelector('.topnav-actions');
+  if(salesActions){
+    salesActions.insertAdjacentHTML('afterbegin',
+      '<button class="btn x-home" id="salesHome" title="Zurück zur Startseite">'+HOME_ICON+'<span>Startseite</span></button>');
+    sales.querySelector('#salesHome').addEventListener('click', goHome);
+  }
+
+  /* ---- Kopfzeile für manuellen Druck (Strg+P) einhängen ---- */
+  const expWrap = explorer.querySelector('.wrap');
+  if(expWrap){
+    expWrap.insertAdjacentHTML('afterbegin',
+      '<div id="printHeader"><p class="ph-title">M365 Explorer — Lizenzvergleich</p><div class="ph-meta"></div><div class="ph-plans"></div></div>');
+  }
+  window.addEventListener('beforeprint', populatePrintHeader);
+
+  /* ---- Navigation ---- */
+  function goTo(tool){
+    const target = tool === 'sales' ? sales : explorer;
+    const other  = tool === 'sales' ? explorer : sales;
+    other.classList.remove('active');
+    target.classList.add('active');
+    window.scrollTo(0, 0);
+    landing.classList.add('lp-dismiss');
+    document.body.classList.remove('lp-lock');
+    try{ history.replaceState(null, '', '#' + tool); }catch(e){}
+  }
+  function goHome(){
+    landing.classList.remove('lp-dismiss');
+    document.body.classList.add('lp-lock');
+    landing.scrollTop = 0;
+    window.scrollTo(0, 0);
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+  }
+
+  landing.querySelectorAll('[data-go]').forEach(card => {
+    card.addEventListener('click', () => goTo(card.dataset.go));
+  });
+
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape' && landing.classList.contains('lp-dismiss')) goHome();
+  });
+
+  /* ---- Aktuell ausgewählte Spalten (Pläne + Add-ons in App-Reihenfolge) ---- */
+  function selectedColumns(){
+    const M = window.M365;
+    if(!M) return [];
+    const all = [...M.plans, ...M.addons];
+    const sel = new Set([...explorer.querySelectorAll('.chip[aria-pressed="true"]')].map(c => c.dataset.key));
+    return all.filter(c => sel.has(c.key));
+  }
+
+  /* ---- PDF-Export des Vergleichs (jsPDF + AutoTable) ---- */
+  function doExportPdf(){
+    const ns = window.jspdf;
+    if(!ns || !ns.jsPDF){ alert('Die PDF-Bibliothek konnte nicht geladen werden. Bitte die Seite neu laden.'); return; }
+    const M = window.M365;
+    if(!M){ return; }
+
+    const cols = selectedColumns();
+    if(cols.length === 0){ alert('Bitte oben mindestens eine Lizenz oder ein Add-on auswählen, um den Vergleich zu exportieren.'); return; }
+
+    const modeBtn = explorer.querySelector('.seg.modes button[aria-pressed="true"]');
+    const mode = modeBtn ? modeBtn.dataset.mode : 'overview';
+    const modeLabel = modeBtn ? modeBtn.textContent.trim() : 'Übersicht';
+    const onlyDiff = (mode === 'diff');
+
+    const doc = new ns.jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 36;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(20,20,20);
+    doc.text('M365 Explorer — Lizenzvergleich', margin, 42);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+    const dateStr = new Date().toLocaleDateString('de-DE',{ day:'2-digit', month:'long', year:'numeric' });
+    doc.text('Ansicht: ' + modeLabel + '     ·     Stand: ' + dateStr, margin, 58);
+    const legend = cols.map(c => (c.short ? c.short + ' = ' + c.name : c.name)).join('     ·     ');
+    const legendLines = doc.splitTextToSize(legend, pageW - margin*2);
+    doc.text(legendLines, margin, 73);
+    const startY = 73 + legendLines.length*11 + 8;
+
+    const head = [['Komponente', ...cols.map(c => c.short || c.name)]];
+    const bodyRows = [];
+    M.categories.forEach(group => {
+      const items = group.items.filter(it => {
+        if(!onlyDiff) return true;
+        const vals = cols.map(c => it.in[c.key] ? 1 : 0);
+        return !vals.every(v => v === vals[0]);
+      });
+      if(items.length === 0) return;
+      bodyRows.push([{ content: group.cat, colSpan: cols.length + 1,
+        styles:{ fillColor:[26,26,26], textColor:[255,255,255], fontStyle:'bold', halign:'left' } }]);
+      items.forEach(it => {
+        const row = [ it.n ];
+        cols.forEach(c => row.push(it.in[c.key] ? 'Ja' : '–'));
+        bodyRows.push(row);
+      });
+    });
+
+    if(bodyRows.length === 0){ alert('Im Modus „Nur Unterschiede" gibt es bei dieser Auswahl keine Unterschiede zu exportieren.'); return; }
+
+    doc.autoTable({
+      head: head,
+      body: bodyRows,
+      startY: startY,
+      margin:{ left:margin, right:margin },
+      theme:'grid',
+      styles:{ font:'helvetica', fontSize:8, cellPadding:3, overflow:'linebreak', valign:'middle', lineColor:[228,228,231], textColor:[40,40,40] },
+      headStyles:{ fillColor:[226,0,116], textColor:[255,255,255], fontStyle:'bold', halign:'center' },
+      columnStyles:{ 0:{ cellWidth:'auto', halign:'left' } },
+      didParseCell:(d) => {
+        if(d.section === 'body' && d.column.index > 0){
+          d.cell.styles.halign = 'center';
+          if(d.cell.raw === 'Ja'){ d.cell.styles.textColor = [31,157,85]; d.cell.styles.fontStyle = 'bold'; }
+          else { d.cell.styles.textColor = [176,176,176]; }
+        }
+      },
+      didDrawPage:(d) => {
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(150,150,150);
+        doc.text('M365 Explorer · Orientierung, kein Ersatz für die verbindlichen Microsoft-Lizenzbedingungen.', margin, pageH - 16);
+        doc.text('Seite ' + d.pageNumber, pageW - margin, pageH - 16, { align:'right' });
+      }
+    });
+
+    const fileDate = new Date().toISOString().slice(0,10);
+    doc.save('M365-Lizenzvergleich_' + fileDate + '.pdf');
+  }
+
+  /* ---- Kopfzeile für den manuellen Browser-Druck befüllen ---- */
+  function populatePrintHeader(){
+    const head = document.getElementById('printHeader');
+    if(!head) return;
+    const modeBtn = explorer.querySelector('.seg.modes button[aria-pressed="true"]');
+    const modeLabel = modeBtn ? modeBtn.textContent.trim() : 'Übersicht';
+    const d = new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'long', year:'numeric' });
+    let plans = [...explorer.querySelectorAll('#thead th[title]')].map(t => t.getAttribute('title'));
+    if(plans.length === 0){
+      const detailName = explorer.querySelector('.detail-hero-name');
+      if(detailName) plans = [detailName.textContent.trim()];
+    }
+    head.querySelector('.ph-meta').textContent = 'Ansicht: ' + modeLabel + '  ·  Stand: ' + d;
+    head.querySelector('.ph-plans').textContent = plans.length ? ('Verglichene Lizenzen: ' + plans.join('  ·  ')) : '';
+  }
+
+  /* Direktaufruf per #explorer / #sales (z.B. Lesezeichen) */
+  const h = (location.hash || '').replace('#','');
+  if(h === 'sales' || h === 'explorer') goTo(h);
+})();
+
+</script>
+</body>
+</html>
