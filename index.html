@@ -2607,9 +2607,9 @@ main {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
         <span id="btn-reset-label">Zurücksetzen</span>
       </button>
-      <button class="btn btn-primary" id="btn-copy" title="Notizen kopieren">
+      <button class="btn btn-primary" id="btn-copy" title="Gesprächsvorbereitung als PDF herunterladen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        Notizen exportieren
+        Als PDF exportieren
       </button>
     </div>
   </div>
@@ -4911,6 +4911,284 @@ function fileSlug(str) {
     .replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 }
 
+/* ========== PDF-EXPORT (Gesprächsvorbereitung) ========== */
+const PDF_C = {
+  magenta: [226, 0, 116], magentaSoft: [252, 231, 243], ink: [15, 15, 20], ink2: [42, 42, 50],
+  ink3: [74, 74, 85], ink4: [113, 113, 122], line: [230, 230, 234], paper: [248, 248, 250],
+  sev: { critical: [211, 38, 38], warning: [194, 83, 10], info: [226, 0, 116], ok: [4, 120, 87] },
+  sevBg: { critical: [255, 241, 241], warning: [255, 247, 235], info: [253, 238, 246], ok: [236, 253, 245] },
+};
+
+// Standard-PDF-Schriften können nur WinAnsi – alles andere ersetzen
+const WINANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+function pdfSafe(str) {
+  return String(str)
+    .replace(/→|⇒/g, '->').replace(/≈/g, '~').replace(/⅓/g, '1/3').replace(/−/g, '-')
+    .replace(/[  ]/g, ' ')
+    .replace(/[^\u0000-ÿ]/g, c => WINANSI_EXTRA.indexOf(c) >= 0 ? c : '');
+}
+function pdfText(html) {
+  return pdfSafe(String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' '));
+}
+
+function summaryLines(groups, topServiceId) {
+  const risks = (groups.find(g => g.id === 'risiko') || { items: [] }).items;
+  const savings = (groups.find(g => g.id === 'sparen') || { items: [] }).items;
+  const out = [];
+  if (risks.length) out.push(['Zuerst klären', pdfText(risks[0].title)]);
+  else out.push(['Risiken', 'Keine Lizenzverstöße oder Sicherheitsrisiken erkannt.']);
+  if (savings.length) out.push([risks.length ? 'Danach' : 'Größter Hebel', pdfText(savings[0].title)]);
+  if (topServiceId && SERVICES[topServiceId]) out.push(['Bester Einstieg', pdfText(SERVICES[topServiceId].name)]);
+  return out;
+}
+
+function exportPdf() {
+  const ns = window.jspdf;
+  if (!ns || !ns.jsPDF) throw new Error('PDF-Bibliothek fehlt');
+  const doc = new ns.jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const M = 46, CW = W - 2 * M, TOP = 56, BOTTOM = H - 58;
+  let y = 0;
+
+  const fill = c => doc.setFillColor(c[0], c[1], c[2]);
+  const stroke = c => doc.setDrawColor(c[0], c[1], c[2]);
+  const color = c => doc.setTextColor(c[0], c[1], c[2]);
+  const font = (style, size) => { doc.setFont('helvetica', style); doc.setFontSize(size); };
+  const lines = (text, width, style, size) => { font(style, size); return doc.splitTextToSize(pdfSafe(text), width); };
+  const newPage = () => { doc.addPage(); y = TOP; };
+  const ensure = h => { if (y + h > BOTTOM) newPage(); };
+
+  // Fließtext zeilenweise, mit Seitenumbruch
+  function para(text, opt) {
+    const o = Object.assign({ x: M, width: CW, style: 'normal', size: 9.5, col: PDF_C.ink3, lh: 1.42 }, opt || {});
+    const ls = lines(text, o.width, o.style, o.size);
+    const step = o.size * o.lh;
+    color(o.col);
+    ls.forEach(l => { ensure(step); font(o.style, o.size); doc.text(l, o.x, y + o.size); y += step; });
+  }
+
+  function sectionTitle(t, sub) {
+    ensure(48);
+    y += 6;
+    fill(PDF_C.magenta); doc.rect(M, y + 3, 7, 7, 'F');
+    font('bold', 14); color(PDF_C.ink); doc.text(pdfSafe(t), M + 15, y + 11);
+    if (sub) { font('normal', 8.5); color(PDF_C.ink4); doc.text(pdfSafe(sub), W - M, y + 11, { align: 'right' }); }
+    y += 20;
+    stroke(PDF_C.line); doc.setLineWidth(0.8); doc.line(M, y, W - M, y);
+    y += 12;
+  }
+
+  const findings = getActiveFindings();
+  const groups = groupFindings(findings);
+  const { sorted: services, counts, triggerMap } = rankServices(findings);
+  const total = totalSeats();
+  const tier = SIZE_TIERS[getSizeTier(total)];
+  const cust = customerName.trim();
+  const today = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' });
+  const gc = id => (groups.find(g => g.id === id) || { items: [] }).items.length;
+
+  /* ---- Kopf ---- */
+  fill(PDF_C.magenta); doc.rect(0, 0, W, 8, 'F');
+  y = 46;
+  font('bold', 8); color(PDF_C.magenta);
+  doc.text('MICROSOFT SALES SUPPORTER  ·  GESPRÄCHSVORBEREITUNG', M, y);
+  y += 26;
+  font('bold', 24); color(PDF_C.ink);
+  doc.text(pdfSafe(cust || 'Kundenanalyse Microsoft 365'), M, y);
+  y += 18;
+  font('normal', 9.5); color(PDF_C.ink4);
+  doc.text(pdfSafe(`${today}  ·  ${tier.label} – ${tier.name} (${tier.range})  ·  Regelstand ${DATA_STAND}`), M, y);
+  y += 22;
+
+  /* ---- Kennzahlen ---- */
+  const kpis = [
+    [fmt(total), 'Basislizenzen'], [String(gc('risiko')), 'Risiken'], [String(gc('sparen')), 'Sparpotenzial'],
+    [String(gc('ungenutzt')), 'Ungenutzt'], [String(gc('ausbau')), 'Ausbau-Chancen'], [String(services.length), 'Maßnahmen'],
+  ];
+  const gap = 6, tw = (CW - gap * (kpis.length - 1)) / kpis.length, th = 46;
+  kpis.forEach((k, i) => {
+    const x = M + i * (tw + gap);
+    fill(PDF_C.paper); stroke(PDF_C.line); doc.setLineWidth(0.6); doc.roundedRect(x, y, tw, th, 5, 5, 'FD');
+    const isRisk = i === 1 && gc('risiko') > 0;
+    font('bold', 17); color(isRisk ? PDF_C.sev.critical : (i === 0 ? PDF_C.magenta : PDF_C.ink));
+    doc.text(k[0], x + 10, y + 22);
+    font('normal', 7); color(PDF_C.ink4);
+    doc.text(pdfSafe(k[1].toUpperCase()), x + 10, y + 36);
+  });
+  y += th + 16;
+
+  /* ---- Kurzfazit ---- */
+  const sl = summaryLines(groups, services[0]);
+  const labW = 82, txtW = CW - labW - 28;
+  const sumRows = sl.map(r => ({ lab: r[0], ls: lines(r[1], txtW, 'bold', 10) }));
+  const sumH = 30 + sumRows.reduce((a, r) => a + r.ls.length * 14 + 6, 0);
+  fill(PDF_C.magentaSoft); doc.roundedRect(M, y, CW, sumH, 6, 6, 'F');
+  fill(PDF_C.magenta); doc.rect(M, y, 4, sumH, 'F');
+  font('bold', 8); color(PDF_C.magenta); doc.text('KURZFAZIT', M + 16, y + 18);
+  let sy = y + 34;
+  sumRows.forEach(r => {
+    font('normal', 9); color(PDF_C.ink4); doc.text(pdfSafe(r.lab), M + 16, sy);
+    font('bold', 10); color(PDF_C.ink);
+    r.ls.forEach((l, i) => doc.text(l, M + 16 + labW, sy + i * 14));
+    sy += r.ls.length * 14 + 6;
+  });
+  y += sumH + 18;
+
+  /* ---- Lizenzbestand ---- */
+  sectionTitle('Lizenzbestand', `${fmt(total)} Basislizenzen`);
+  const body = [];
+  SKU_GROUPS.forEach(g => {
+    const used = g.skus.filter(s => (state[s.id] || 0) > 0);
+    if (!used.length) return;
+    body.push([{ content: pdfSafe(g.name), colSpan: 2, styles: { fillColor: PDF_C.paper, textColor: PDF_C.ink, fontStyle: 'bold', fontSize: 8.5 } }]);
+    used.forEach(s => body.push([pdfSafe(s.name), fmt(state[s.id])]));
+  });
+  doc.autoTable({
+    startY: y, body: body, theme: 'plain', margin: { left: M, right: M, top: TOP, bottom: H - BOTTOM },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: { top: 4, bottom: 4, left: 8, right: 8 }, textColor: PDF_C.ink2, lineColor: PDF_C.line, lineWidth: { bottom: 0.5 } },
+    columnStyles: { 1: { halign: 'right', fontStyle: 'bold', cellWidth: 80 } },
+  });
+  y = doc.lastAutoTable.finalY + 22;
+
+  /* ---- Befunde ---- */
+  const cardH = f => {
+    const iw = CW - 2 * 12 - 4;
+    return 12 + 14 + lines(pdfText(f.title), iw, 'bold', 10.5).length * 13.5 + 4
+      + lines(pdfText(f.text), iw, 'normal', 9).length * 12.6 + 8
+      + lines(pdfText(f.anchor), iw - 12, 'normal', 9).length * 12.6 + 12 + 12;
+  };
+  if (groups.length) ensure(64 + Math.min(cardH(groups[0].items[0]) + 20, BOTTOM - TOP - 90));
+  sectionTitle('Befunde', `${findings.length} insgesamt`);
+  groups.forEach(g => {
+    ensure(20 + Math.min(cardH(g.items[0]), BOTTOM - TOP - 40));
+    font('bold', 11); color(g.id === 'risiko' ? PDF_C.sev.critical : PDF_C.ink);
+    doc.text(pdfSafe(g.label), M, y + 10);
+    const lw = doc.getTextWidth(pdfSafe(g.label));
+    font('normal', 8.5); color(PDF_C.ink4);
+    doc.text(pdfSafe(`${g.hint}  ·  ${g.items.length}`), M + lw + 10, y + 10);
+    y += 20;
+
+    g.items.forEach(f => {
+      const pad = 12, iw = CW - 2 * pad - 4;
+      const tl = lines(pdfText(f.title), iw, 'bold', 10.5);
+      const xl = lines(pdfText(f.text), iw, 'normal', 9);
+      const al = lines(pdfText(f.anchor), iw - 12, 'normal', 9);
+      const h = pad + 14 + tl.length * 13.5 + 4 + xl.length * 12.6 + 8 + al.length * 12.6 + 12 + pad;
+      if (h < BOTTOM - TOP) ensure(h);
+      const y0 = y;
+      stroke(PDF_C.line); doc.setLineWidth(0.6); fill([255, 255, 255]);
+      doc.roundedRect(M, y0, CW, h, 6, 6, 'FD');
+      fill(PDF_C.sev[f.sev]); doc.rect(M, y0, 4, h, 'F');
+      let cy = y0 + pad;
+      // Badge
+      const lab = labelFor(f.sev).toUpperCase();
+      font('bold', 7); const bw = doc.getTextWidth(lab) + 12;
+      fill(PDF_C.sevBg[f.sev]); doc.roundedRect(M + pad + 4, cy, bw, 12, 3, 3, 'F');
+      color(PDF_C.sev[f.sev]); doc.text(lab, M + pad + 10, cy + 8.6);
+      font('normal', 7.5); color(PDF_C.ink4); doc.text(pdfSafe(f.tag.toUpperCase()), M + pad + 10 + bw, cy + 8.6);
+      cy += 14 + 4;
+      font('bold', 10.5); color(PDF_C.ink); tl.forEach(l => { doc.text(l, M + pad + 4, cy + 8); cy += 13.5; });
+      cy += 2;
+      font('normal', 9); color(PDF_C.ink3); xl.forEach(l => { doc.text(l, M + pad + 4, cy + 8); cy += 12.6; });
+      cy += 6;
+      const ah = al.length * 12.6 + 10;
+      fill(PDF_C.paper); doc.rect(M + pad + 4, cy, iw, ah, 'F');
+      fill(PDF_C.magenta); doc.rect(M + pad + 4, cy, 2, ah, 'F');
+      font('normal', 9); color(PDF_C.ink2);
+      al.forEach((l, i) => doc.text(l, M + pad + 14, cy + 13 + i * 12.6));
+      y = y0 + h + 8;
+    });
+    y += 8;
+  });
+
+  /* ---- Maßnahmen ---- */
+  const serviceH = (s, sid, qs) => {
+    let h = 32 + lines(s.tagline, CW - 32, 'normal', 9).length * 12.8 + 6 + 12;
+    triggerMap[sid].forEach(t => { h += lines(pdfText(t.title), CW - 44, 'normal', 8.8).length * 11.9; });
+    h += 6 + lines('„' + s.opener + '“', CW - 56, 'italic', 9.2).length * 13 + 36 + 13;
+    qs.forEach(q => { h += lines(q.q, CW - 52, 'normal', 9).length * 12.6 + 4; });
+    return h + 16;
+  };
+  if (services.length) {
+    {
+      const s0 = SERVICES[services[0]];
+      const q0 = pickQuestionsForSize(s0.questions, getSizeTier(total), new Set(), 4);
+      ensure(64 + Math.min(serviceH(s0, services[0], q0), BOTTOM - TOP - 90));
+    }
+    sectionTitle('Empfohlene Maßnahmen', `Fragen passend zur Größe: ${tier.name}`);
+    const used = new Set();
+    services.forEach((sid, i) => {
+      const s = SERVICES[sid];
+      const qsPreview = pickQuestionsForSize(s.questions, getSizeTier(total), new Set(used), 4);
+      ensure(Math.min(serviceH(s, sid, qsPreview), BOTTOM - TOP));
+      // Nummer
+      fill(PDF_C.ink); doc.roundedRect(M, y, 22, 22, 5, 5, 'F');
+      font('bold', 10); color([255, 255, 255]); doc.text(String(i + 1).padStart(2, '0'), M + 11, y + 14.5, { align: 'center' });
+      font('bold', 12); color(PDF_C.ink); doc.text(pdfSafe(s.name), M + 32, y + 10);
+      font('normal', 8); color(PDF_C.magenta);
+      doc.text(pdfSafe(`${TIER_LABELS[s.tier].toUpperCase()}  ·  ${counts[sid]} AUSLÖSER`), M + 32, y + 21);
+      y += 32;
+      para(s.tagline, { x: M + 32, width: CW - 32, size: 9, col: PDF_C.ink3 });
+      y += 6;
+
+      font('bold', 7.5); color(PDF_C.ink4); ensure(14); doc.text('AUSGELÖST DURCH', M + 32, y + 7); y += 12;
+      triggerMap[sid].forEach(t => {
+        ensure(13);
+        fill(PDF_C.sev[t.sev]); doc.circle(M + 36, y + 4.5, 2, 'F');
+        para(pdfText(t.title), { x: M + 44, width: CW - 44, size: 8.8, col: PDF_C.ink2, lh: 1.35 });
+      });
+      y += 6;
+
+      // Gesprächseinstieg
+      const ol = lines('„' + s.opener + '“', CW - 32 - 24, 'italic', 9.2);
+      const oh = ol.length * 13 + 26;
+      ensure(oh);
+      fill(PDF_C.magentaSoft); doc.roundedRect(M + 32, y, CW - 32, oh, 5, 5, 'F');
+      font('bold', 7.5); color(PDF_C.magenta); doc.text('GESPRÄCHSEINSTIEG', M + 44, y + 13);
+      font('italic', 9.2); color(PDF_C.ink2);
+      ol.forEach((l, k) => doc.text(l, M + 44, y + 27 + k * 13));
+      y += oh + 10;
+
+      // Fragen
+      const qs = pickQuestionsForSize(s.questions, getSizeTier(total), used, 4);
+      font('bold', 7.5); color(PDF_C.ink4); ensure(14); doc.text('FRAGEN FÜR DAS GESPRÄCH', M + 32, y + 7); y += 13;
+      qs.forEach((q, k) => {
+        const ql = lines(q.q, CW - 32 - 20, 'normal', 9);
+        ensure(ql.length * 12.6 + 4);
+        font('bold', 9); color(PDF_C.magenta); doc.text(`${k + 1}.`, M + 32, y + 9);
+        font('normal', 9); color(PDF_C.ink2);
+        ql.forEach((l, n) => doc.text(l, M + 50, y + 9 + n * 12.6));
+        y += ql.length * 12.6 + 4;
+      });
+      y += 16;
+      if (i < services.length - 1) { stroke(PDF_C.line); doc.setLineWidth(0.5); doc.line(M, y - 8, W - M, y - 8); }
+    });
+  }
+
+  /* ---- Fußzeile auf jeder Seite ---- */
+  const n = doc.getNumberOfPages();
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p);
+    stroke(PDF_C.line); doc.setLineWidth(0.5); doc.line(M, H - 40, W - M, H - 40);
+    font('normal', 7.5); color(PDF_C.ink4);
+    doc.text(pdfSafe('Interne Gesprächsvorbereitung · Orientierungshilfe, kein Ersatz für die verbindlichen Microsoft-Lizenzbedingungen.'), M, H - 27);
+    doc.text(`Seite ${p} von ${n}`, W - M, H - 27, { align: 'right' });
+    if (p > 1) {
+      fill(PDF_C.magenta); doc.rect(0, 0, W, 4, 'F');
+      font('normal', 7.5); color(PDF_C.ink4);
+      doc.text(pdfSafe(cust ? `Gesprächsvorbereitung · ${cust}` : 'Gesprächsvorbereitung'), M, 30);
+    }
+  }
+
+  const d = new Date().toISOString().slice(0, 10);
+  const slug = fileSlug(customerName);
+  doc.save('M365-Gespraechsvorbereitung' + (slug ? '_' + slug : '') + '_' + d + '.pdf');
+}
+
+
 /* ========== TOAST ========== */
 let toastTimer;
 function toast(msg) {
@@ -4958,27 +5236,14 @@ onChange();
 
 document.getElementById('btn-copy').addEventListener('click', () => {
   if (!anyData()) { toast('Keine Daten zum Exportieren'); return; }
+  if (totalSeats() === 0) { toast('Bitte zuerst Basislizenzen eintragen'); return; }
+  let pdfOk = false;
+  try { exportPdf(); pdfOk = true; } catch (e) { console.error(e); }
+  // Zusätzlich die Notizen als Text in die Zwischenablage (z. B. für CRM-Einträge)
   const text = buildNotes();
-  // Primär: echter Datei-Download (zuverlässig, auch ohne Zwischenablage-Rechte)
-  let downloaded = false;
-  try {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const d = new Date().toISOString().slice(0, 10);
-    const slug = fileSlug(customerName);
-    a.href = url;
-    a.download = 'M365-SalesSupporter' + (slug ? '_' + slug : '') + '_' + d + '.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-    downloaded = true;
-  } catch (e) {}
-  // Zusätzlich in die Zwischenablage – Meldung richtet sich nach dem Ergebnis
-  const done = copied => toast(downloaded
-    ? (copied ? 'Exportiert und in die Zwischenablage kopiert' : 'Notizen als Textdatei exportiert')
-    : (copied ? 'In die Zwischenablage kopiert' : 'Export fehlgeschlagen'));
+  const done = copied => toast(pdfOk
+    ? (copied ? 'PDF erstellt · Notizen zusätzlich in der Zwischenablage' : 'PDF erstellt')
+    : (copied ? 'PDF fehlgeschlagen · Notizen in der Zwischenablage' : 'Export fehlgeschlagen'));
   try {
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
     else done(false);
